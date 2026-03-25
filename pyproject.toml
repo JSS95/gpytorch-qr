@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpytorch-qr"
+version = "0.0.0"
+authors = [
+    {name = "Jisoo Song", email = "jeesoo9595@snu.ac.kr"}
+]
+description = "Gaussian process quantile regression using GPyTorch"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = [
+    "LICENSE",
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "gpytorch",
+]
+
+[project.urls]
+homepage = "https://pypi.python.org/pypi/gpytorch-qr/"
+source = "https://github.com/JSS95/gpytorch-qr"
+documentation = "https://gpytorch-qr.readthedocs.io"
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+doc = [
+    "sphinx",
+    "numpydoc",
+    "pydata_sphinx_theme",
+    "matplotlib",
+]
+dev = [
+    "flake8",
+    "black",
+    "isort",
+    "gpytorch-qr[test,doc]",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+doctest_optionflags = [
+    "NORMALIZE_WHITESPACE",
+    "IGNORE_EXCEPTION_DETAIL",
+    "ELLIPSIS",
+]
+addopts = "--ignore=doc --doctest-modules --import-mode=importlib"
