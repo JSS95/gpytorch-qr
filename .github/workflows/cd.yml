@@ -1,0 +1,32 @@
+name: CD
+
+on: push
+
+jobs:
+
+  publish:
+
+    runs-on: ubuntu-latest
+  
+    if: startsWith(github.event.ref, 'refs/tags')
+  
+    steps:
+
+      - name: get repo
+        uses: actions/checkout@v3
+
+      - name: set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: build package
+        run: |
+          pip install build
+          python -m build
+
+      - name: publish to PyPI
+        run: |
+          pip install twine
+          pip install -U packaging
+          twine upload dist/* -u __token__ -p ${{ secrets.pypi_token }}
