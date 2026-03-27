@@ -47,13 +47,15 @@ Define multi-task Gaussian process model:
     from gpytorch.kernels import RBFKernel, ScaleKernel
     from gpytorch_qr import CenterGapLmcVariationalStrategy, CenterGapModel
 
-    taus = torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95])
-    central_tau = taus[(taus - 0.5).abs().argmin()]
-    num_lower_quantiles = len(taus[taus < central_tau])
-    num_latents = 9
-
     class MTGP(CenterGapModel):
-        def __init__(self, inducing_points):
+        def __init__(
+            self,
+            inducing_points,
+            num_quantiles,
+            num_lower_quantiles,
+            num_latents,
+            num_lower_latents,
+        ):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
                 N,
@@ -66,11 +68,11 @@ Define multi-task Gaussian process model:
                     variational_distribution,
                     learn_inducing_locations=True,
                 ),
-                num_tasks=len(taus),
+                num_tasks=num_quantiles,
                 num_latents=num_latents,
                 latent_dim=-1,
                 num_lower_quantiles=num_lower_quantiles,
-                num_lower_latents=(num_latents - 1) // 2,
+                num_lower_latents=num_lower_latents,
             )
 
             center_mean = PriorMean()
@@ -84,7 +86,13 @@ Define multi-task Gaussian process model:
             super().__init__(variational_strategy, center_mean, gap_mean, covar_module)
 
     inducing_points = torch.linspace(0, 1, 20).reshape(-1, 1)
-    model = MTGP(inducing_points)
+    central_tau = taus[(taus - 0.5).abs().argmin()]
+    num_lower_quantiles = len(taus[taus < central_tau])
+    num_latents = 9
+    num_lower_latents = (num_latents - 1) // 2
+    model = MTGP(
+        inducing_points, len(taus), num_lower_quantiles, num_latents, num_lower_latents
+    )
 
 Define likelihood:
 
