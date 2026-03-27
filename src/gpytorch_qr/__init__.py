@@ -5,11 +5,22 @@
    :context:
 
     import torch
+    from torch.distributions import Normal
 
-    x = torch.linspace(0, 1, 100).repeat(5).reshape(-1, 1)
-    y = (torch.cos(x * 2 * 3.14) + torch.randn(x.shape).mul(x + 0.1)).squeeze()
+    def mean(x):
+        return torch.cos(x * 2 * 3.14)
+
+    def std(x):
+        return x + 0.1
+
+    x_range = torch.linspace(0, 1, 100).reshape(-1, 1)
+    x = x_range.repeat(5, 1)
+    y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
+    taus = torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95])
+    true_quantiles = mean(x_range) + std(x_range) * Normal(0, 1).icdf(taus)
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='k', marker='.')
+    plt.plot(x_range, true_quantiles, '--', c='gray')
 
 Prior mean function for the central quantile:
 
@@ -121,6 +132,7 @@ Evaluate:
     quantiles = centergap_to_quantiles(central, lower_gaps, upper_gaps)
 
     plt.scatter(x, y, c='k', marker='.')
+    plt.plot(x_range, true_quantiles, '--', c='gray')
     plt.plot(x_pred, quantiles)
 """
 
