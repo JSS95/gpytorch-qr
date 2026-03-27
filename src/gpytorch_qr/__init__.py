@@ -45,9 +45,9 @@ Define multi-task Gaussian process model:
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch_qr import CenterGapLmcVariationalStrategy, CenterGapModel
+    from gpytorch_qr import CenterGapLmcVariationalStrategy, CenterGapGP
 
-    class MTGP(CenterGapModel):
+    class MTGP(CenterGapGP):
         def __init__(
             self,
             inducing_points,
@@ -85,23 +85,30 @@ Define multi-task Gaussian process model:
             )
             super().__init__(variational_strategy, center_mean, gap_mean, covar_module)
 
-    inducing_points = torch.linspace(0, 1, 20).reshape(-1, 1)
-    central_tau = taus[(taus - 0.5).abs().argmin()]
-    num_lower_quantiles = len(taus[taus < central_tau])
-    num_latents = 9
-    num_lower_latents = (num_latents - 1) // 2
-    model = MTGP(
-        inducing_points, len(taus), num_lower_quantiles, num_latents, num_lower_latents
-    )
-
-Define likelihood:
+Define multi-task Gaussian process quantile regression model:
 
 .. plot::
    :context: close-figs
 
-    from gpytorch_qr import CenterGapLikelihood
+    from gpytorch_qr import MTGPQR
 
-    likelihood = CenterGapLikelihood(taus=taus)
+    class MyModel(MTGPQR):
+        def __init__(self):
+            inducing_points = torch.linspace(0, 1, 20).reshape(-1, 1)
+            central_tau = taus[(taus - 0.5).abs().argmin()]
+            num_lower_quantiles = len(taus[taus < central_tau])
+            num_latents = 9
+            num_lower_latents = (num_latents - 1) // 2
+            gp = MTGP(
+                inducing_points=inducing_points,
+                num_quantiles=len(taus),
+                num_lower_quantiles=num_lower_quantiles,
+                num_latents=num_latents,
+                num_lower_latents=num_lower_latents,
+            )
+            super().__init__(taus, gp)
+
+    model = MyModel()
 
 Train the model:
 
@@ -111,13 +118,11 @@ Train the model:
     from gpytorch.mlls import VariationalELBO
 
     model.train()
-    likelihood.train()
-    parameters = list(model.parameters()) + list(likelihood.parameters())
-    mll = VariationalELBO(likelihood, model, num_data=y.numel())
-    optimizer = torch.optim.Adam(parameters, lr=0.01)
+    mll = VariationalELBO(model.likelihood, model.gp, num_data=y.numel())
+    optimizer = torch.optim.Adam(list(model.parameters()), lr=0.01)
 
     for _ in range(100):
-        output = model(x)
+        output = model.gp(x)
         loss = -mll(output, y)
         loss.backward()
         optimizer.step()
@@ -128,16 +133,9 @@ Evaluate:
 .. plot::
    :context: close-figs
 
-    from gpytorch_qr import centergap_to_quantiles
-
     model.eval()
-    likelihood.eval()
     with torch.no_grad():
-        model_pred = model(x_pred).mean.detach()
-    central = model_pred[..., 0:1]
-    lower_gaps = model_pred[..., 1:1 + num_lower_quantiles]
-    upper_gaps = model_pred[..., 1 + num_lower_quantiles:]
-    quantiles = centergap_to_quantiles(central, lower_gaps, upper_gaps)
+        quantiles = model(x_pred).detach()
 
     plt.scatter(x, y, c='k', marker='.')
     plt.plot(x_range, true_quantiles, '--', c='gray')
@@ -151,10 +149,11 @@ import torch.nn.functional as F
 
 __all__ = [
     "centergap_to_quantiles",
-    "CenterGapModel",
+    "CenterGapGP",
     "ALD",
     "CenterGapLikelihood",
     "CenterGapLmcVariationalStrategy",
+    "MTGPQR",
 ]
 
 
@@ -187,7 +186,7 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     return ret
 
 
-class CenterGapModel(gpytorch.models.ApproximateGP):
+class CenterGapGP(gpytorch.models.ApproximateGP):
     """Gaussian process modeling the center-gap representation of quantiles."""
 
     def __init__(self, variational_strategy, center_mean, gap_mean, covar_module):
@@ -349,3 +348,22 @@ class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
             self.lower_lmc_coefficients,
             self.upper_lmc_coefficients,
         )
+
+
+class MTGPQR(torch.nn.Module):
+    """Multi-task Gaussian process quantile regression model."""
+
+    def __init__(self, taus, gp):
+        super().__init__()
+        self.gp = gp
+        self.likelihood = CenterGapLikelihood(taus=taus)
+
+        central_tau = taus[(taus - 0.5).abs().argmin()]
+        self.num_lower_quantiles = len(taus[taus < central_tau])
+
+    def forward(self, x):
+        function_means = self.gp(x).mean
+        median = function_means[..., :1]
+        lower_gaps = function_means[..., 1 : 1 + self.num_lower_quantiles]
+        upper_gaps = function_means[..., 1 + self.num_lower_quantiles :]
+        return centergap_to_quantiles(median, lower_gaps, upper_gaps)
