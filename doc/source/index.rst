@@ -3,8 +3,14 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+*************************
 GPyTorch-QR documentation
-=========================
+*************************
+
+GPyTorch-QR is a Python package for Gaussian process quantile regression using GPyTorch.
+
+Module reference
+================
 
 .. automodule:: gpytorch_qr
     :members:

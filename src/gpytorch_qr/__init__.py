@@ -187,7 +187,19 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
 
 
 class CenterGapGP(gpytorch.models.ApproximateGP):
-    """Gaussian process modeling the center-gap representation of quantiles."""
+    """Gaussian process modeling the center-gap representation of quantiles.
+
+    Parameters
+    ----------
+    variational_strategy : gpytorch.variational.VariationalStrategy
+        The variational strategy for the Gaussian process.
+    center_mean : gpytorch.means.Mean
+        The mean module for the central quantile.
+    gap_mean : gpytorch.means.Mean
+        The mean module for the gaps between quantiles.
+    covar_module : gpytorch.kernels.Kernel
+        The covariance module for the Gaussian process.
+    """
 
     def __init__(self, variational_strategy, center_mean, gap_mean, covar_module):
         super().__init__(variational_strategy)
@@ -196,6 +208,7 @@ class CenterGapGP(gpytorch.models.ApproximateGP):
         self.covar_module = covar_module
 
     def forward(self, x):
+        """Compute distribution of the center-gap Gaussian process."""
         center_mean = self.center_mean(x)
         gap_mean = self.gap_mean(x)
         mean = torch.concatenate([center_mean.unsqueeze(0), gap_mean], dim=0)
@@ -282,6 +295,7 @@ class CenterGapLikelihood(gpytorch.likelihoods.Likelihood):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
+        """Compute likelihood of center-gap model."""
         # function_samples: (S, N, T)
         median = function_samples[:, :, :1]
         lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
@@ -351,7 +365,15 @@ class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
 
 
 class MTGPQR(torch.nn.Module):
-    """Multi-task Gaussian process quantile regression model."""
+    """Multi-task Gaussian process quantile regression model.
+
+    Parameters
+    ----------
+    taus : tensor with shape (T,)
+        The quantile levels of the distribution.
+    gp : CenterGapGP
+        The Gaussian process modeling the center-gap representation of quantiles.
+    """
 
     def __init__(self, taus, gp):
         super().__init__()
@@ -362,6 +384,7 @@ class MTGPQR(torch.nn.Module):
         self.num_lower_quantiles = len(taus[taus < central_tau])
 
     def forward(self, x):
+        """Compute quantile functions."""
         function_means = self.gp(x).mean
         median = function_means[..., :1]
         lower_gaps = function_means[..., 1 : 1 + self.num_lower_quantiles]

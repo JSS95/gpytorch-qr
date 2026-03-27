@@ -6,3 +6,37 @@
 [![CI](https://github.com/JSS95/gpytorch-qr/actions/workflows/ci.yml/badge.svg)](https://github.com/JSS95/gpytorch-qr/actions/workflows/ci.yml)
 [![CD](https://github.com/JSS95/gpytorch-qr/actions/workflows/cd.yml/badge.svg)](https://github.com/JSS95/gpytorch-qr/actions/workflows/cd.yml)
 [![Docs](https://readthedocs.org/projects/gpytorch-qr/badge/?version=latest)](https://gpytorch-qr.readthedocs.io/en/latest/?badge=latest)
+
+Gaussian process quantile regression using GPyTorch.
+
+This packages simultaneously models quantile functions with different quantile levels.
+Non-crossing property is guaranteed by modeling the central quantiles and gaps between quantile functions, which is referred to as the 'center-gap representation'.
+
+## Installation
+
+```
+$ pip install gpytorch-qr
+```
+
+## Documentation
+
+The manual can be found online:
+
+> https://gpytorch-qr.readthedocs.io
+
+If you want to build the document yourself, get the source code and install with `[doc]` dependency.
+Then, go to `doc` directory and build the document:
+
+```
+$ pip install .[doc]
+$ cd doc
+$ make html
+```
+
+Document will be generated in `build/html` directory. Open `index.html` to see the central page.
+
+## Developing
+
+### Installation
+
+For development features, you must install the package by `pip install -e .[dev]`.
