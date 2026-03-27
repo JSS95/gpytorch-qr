@@ -30,7 +30,6 @@ Define multi-task Gaussian process model:
 .. plot::
    :context: close-figs
 
-    from gpytorch.models import ApproximateGP
     from gpytorch.variational import CholeskyVariationalDistribution
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
@@ -40,14 +39,14 @@ Define multi-task Gaussian process model:
     taus = torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95])
     central_tau = taus[(taus - 0.5).abs().argmin()]
     num_lower_quantiles = len(taus[taus < central_tau])
+    num_latents = 9
 
     class MTGP(CenterGapModel):
         def __init__(self, inducing_points):
-            Q = 9
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
                 N,
-                batch_shape=torch.Size([Q]),
+                batch_shape=torch.Size([num_latents]),
             )
             variational_strategy = CenterGapLmcVariationalStrategy(
                 VariationalStrategy(
@@ -57,22 +56,21 @@ Define multi-task Gaussian process model:
                     learn_inducing_locations=True,
                 ),
                 num_tasks=len(taus),
-                num_latents=Q,
+                num_latents=num_latents,
                 latent_dim=-1,
                 num_lower_quantiles=num_lower_quantiles,
-                num_lower_latents=(Q - 1) // 2,
+                num_lower_latents=(num_latents - 1) // 2,
             )
-            super().__init__(variational_strategy)
-            self.register_buffer("taus", taus)
 
-            self.center_mean = PriorMean()
-            self.gap_mean = ConstantMean(
-                batch_shape=torch.Size([Q - 1])
+            center_mean = PriorMean()
+            gap_mean = ConstantMean(
+                batch_shape=torch.Size([num_latents - 1])
             )
-            self.covar_module = ScaleKernel(
-                RBFKernel(ard_num_dims=D, batch_shape=torch.Size([Q])),
-                batch_shape=torch.Size([Q]),
+            covar_module = ScaleKernel(
+                RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
+                batch_shape=torch.Size([num_latents]),
             )
+            super().__init__(variational_strategy, center_mean, gap_mean, covar_module)
 
     inducing_points = torch.linspace(0, 1, 20).reshape(-1, 1)
     model = MTGP(inducing_points)
@@ -84,7 +82,7 @@ Define likelihood:
 
     from gpytorch_qr import CenterGapLikelihood
 
-    likelihood = CenterGapLikelihood(taus=model.taus)
+    likelihood = CenterGapLikelihood(taus=taus)
 
 Train the model:
 
@@ -172,32 +170,11 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
 class CenterGapModel(gpytorch.models.ApproximateGP):
     """Gaussian process modeling the center-gap representation of quantiles."""
 
-    @property
-    def center_mean(self):
-        """Prior mean for the central quantile."""
-        return self._center_mean
-
-    @center_mean.setter
-    def center_mean(self, model):
-        self._center_mean = model
-
-    @property
-    def gap_mean(self):
-        """Batched prior mean for the gaps."""
-        return self._gap_mean
-
-    @gap_mean.setter
-    def gap_mean(self, model):
-        self._gap_mean = model
-
-    @property
-    def covar_module(self):
-        """Batched covariance module for the center and gaps."""
-        return self._covar_module
-
-    @covar_module.setter
-    def covar_module(self, model):
-        self._covar_module = model
+    def __init__(self, variational_strategy, center_mean, gap_mean, covar_module):
+        super().__init__(variational_strategy)
+        self.center_mean = center_mean
+        self.gap_mean = gap_mean
+        self.covar_module = covar_module
 
     def forward(self, x):
         center_mean = self.center_mean(x)
