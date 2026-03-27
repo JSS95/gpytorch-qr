@@ -35,7 +35,7 @@ Define multi-task Gaussian process model:
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch_qr import QrLmcVariationalStrategy, CenterGapModel
+    from gpytorch_qr import CenterGapLmcVariationalStrategy, CenterGapModel
 
     taus = torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95])
     central_tau = taus[(taus - 0.5).abs().argmin()]
@@ -49,7 +49,7 @@ Define multi-task Gaussian process model:
                 N,
                 batch_shape=torch.Size([Q]),
             )
-            variational_strategy = QrLmcVariationalStrategy(
+            variational_strategy = CenterGapLmcVariationalStrategy(
                 VariationalStrategy(
                     self,
                     inducing_points,
@@ -136,7 +136,7 @@ __all__ = [
     "CenterGapModel",
     "ALD",
     "CenterGapLikelihood",
-    "QrLmcVariationalStrategy",
+    "CenterGapLmcVariationalStrategy",
 ]
 
 
@@ -310,7 +310,9 @@ class CenterGapLikelihood(gpytorch.likelihoods.Likelihood):
         return lp.sum(dim=1)  # (N,)
 
 
-class QrLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
+class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
+    """LMC variational strategy for the center-gap quantile regression model."""
+
     def __init__(
         self,
         base_variational_strategy,
