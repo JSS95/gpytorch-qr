@@ -25,7 +25,7 @@ Prior mean function for the central quantile:
     plt.scatter(x, y, c='k', marker='.')
     plt.plot(x_pred, PriorMean()(x_pred).detach(), c='r')
 
-Multi-task Gaussian process quantile regression model:
+Define multi-task Gaussian process model:
 
 .. plot::
    :context: close-figs
@@ -35,14 +35,13 @@ Multi-task Gaussian process quantile regression model:
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch.distributions import MultivariateNormal
-    from gpytorch_qr import QrLmcVariationalStrategy, CenterGapLikelihood
+    from gpytorch_qr import QrLmcVariationalStrategy, CenterGapModel
 
     taus = torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95])
     central_tau = taus[(taus - 0.5).abs().argmin()]
     num_lower_quantiles = len(taus[taus < central_tau])
 
-    class MTGPQR(ApproximateGP):
+    class MTGP(CenterGapModel):
         def __init__(self, inducing_points):
             Q = 9
             N, D = inducing_points.size()
@@ -66,8 +65,8 @@ Multi-task Gaussian process quantile regression model:
             super().__init__(variational_strategy)
             self.register_buffer("taus", taus)
 
-            self.center_priormean = PriorMean()
-            self.gap_priormean = ConstantMean(
+            self.center_mean = PriorMean()
+            self.gap_mean = ConstantMean(
                 batch_shape=torch.Size([Q - 1])
             )
             self.covar_module = ScaleKernel(
@@ -75,15 +74,16 @@ Multi-task Gaussian process quantile regression model:
                 batch_shape=torch.Size([Q]),
             )
 
-        def forward(self, x):
-            center_mean = self.center_priormean(x)
-            gap_mean = self.gap_priormean(x)
-            mean = torch.concatenate([center_mean.unsqueeze(0), gap_mean], dim=0)
-            covar = self.covar_module(x)
-            return MultivariateNormal(mean, covar)
-
     inducing_points = torch.linspace(0, 1, 20).reshape(-1, 1)
-    model = MTGPQR(inducing_points)
+    model = MTGP(inducing_points)
+
+Define likelihood:
+
+.. plot::
+   :context: close-figs
+
+    from gpytorch_qr import CenterGapLikelihood
+
     likelihood = CenterGapLikelihood(taus=model.taus)
 
 Train the model:
@@ -133,6 +133,7 @@ import torch.nn.functional as F
 
 __all__ = [
     "centergap_to_quantiles",
+    "CenterGapModel",
     "ALD",
     "CenterGapLikelihood",
     "QrLmcVariationalStrategy",
@@ -166,6 +167,44 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
 
     ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=-1)
     return ret
+
+
+class CenterGapModel(gpytorch.models.ApproximateGP):
+    """Gaussian process modeling the center-gap representation of quantiles."""
+
+    @property
+    def center_mean(self):
+        """Prior mean for the central quantile."""
+        return self._center_mean
+
+    @center_mean.setter
+    def center_mean(self, model):
+        self._center_mean = model
+
+    @property
+    def gap_mean(self):
+        """Batched prior mean for the gaps."""
+        return self._gap_mean
+
+    @gap_mean.setter
+    def gap_mean(self, model):
+        self._gap_mean = model
+
+    @property
+    def covar_module(self):
+        """Batched covariance module for the center and gaps."""
+        return self._covar_module
+
+    @covar_module.setter
+    def covar_module(self, model):
+        self._covar_module = model
+
+    def forward(self, x):
+        center_mean = self.center_mean(x)
+        gap_mean = self.gap_mean(x)
+        mean = torch.concatenate([center_mean.unsqueeze(0), gap_mean], dim=0)
+        covar = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean, covar)
 
 
 class ALD(torch.distributions.Distribution):
@@ -247,7 +286,7 @@ class CenterGapLikelihood(gpytorch.likelihoods.Likelihood):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
-        # function_samples: (S, N, T) <- from MedianGapGP
+        # function_samples: (S, N, T)
         median = function_samples[:, :, :1]
         lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
         upper_gaps = function_samples[:, :, 1 + self.lower_count :]
