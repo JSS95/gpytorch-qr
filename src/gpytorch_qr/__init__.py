@@ -286,7 +286,7 @@ class CenterGapLikelihood(gpytorch.likelihoods.Likelihood):
             "raw_scales",
             gpytorch.constraints.Positive(),
         )
-        central_quantile = self.taus[np.argmin(torch.abs(self.taus - 0.5))]
+        central_quantile = self.taus[torch.argmin(torch.abs(self.taus - 0.5))]
         self.lower_count = (self.taus < central_quantile).count_nonzero()
 
     @property
