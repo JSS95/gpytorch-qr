@@ -26,13 +26,44 @@ Multitask GPQR (Center-gap representation)
     plt.plot(x_range, true_quantiles, '--', c='k')
 """
 
+import gpytorch
 import torch
+import torch.nn.functional as F
 
 __all__ = [
-    "QuantileGP",
+    "centergap_to_quantiles",
     "ALD",
-    "ALDLikelihood",
+    "CenterGapALDLikelihood",
 ]
+
+
+def centergap_to_quantiles(central, lower_gaps, upper_gaps):
+    """Convert center-gap representation to quantiles.
+
+    Parameters
+    ----------
+    central : torch.Tensor with shape (..., 1)
+        The central quantile values.
+    lower_gaps : torch.Tensor with shape (..., L)
+        Pre-transformed lower gap values.
+    upper_gaps : torch.Tensor with shape (..., U)
+        Pre-transformed upper gap values.
+
+    Returns
+    -------
+    quantiles : torch.Tensor with shape (..., T)
+        The quantile values. (T = L + U + 1)
+    """
+    lower_gaps = F.softplus(lower_gaps)
+    lower_quantiles = central - lower_gaps.flip(dims=[-1]).cumsum(dim=-1).flip(
+        dims=[-1]
+    )
+
+    upper_gaps = F.softplus(upper_gaps)
+    upper_quantiles = central + upper_gaps.cumsum(dim=-1)
+
+    ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=-1)
+    return ret
 
 
 class ALD(torch.distributions.Distribution):
@@ -40,18 +71,18 @@ class ALD(torch.distributions.Distribution):
 
     Parameters
     ----------
-    m : torch.Tensor with shape (S, N, T)
+    m : torch.Tensor with shape (S, N, Q)
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape (T,)
-        The scale parameters of the distribution for each task.
-    kappa : torch.Tensor with shape (T,)
+    lamda : torch.Tensor with shape (Q,)
+        The scale parameters of the distribution for each quantile.
+    kappa : torch.Tensor with shape (Q,)
         The quantile levels of the distribution.
 
     Notes
     -----
     In the context of multitask quantile regression, the location parameter *m*
     corresponds to sample points drawn from posterior distributions of latent GPs.
-    For *T* tasks, *S* samples are drawn for *N* data points.
+    For *Q* quantiles, *S* samples are drawn for *N* data points.
 
     The value passed to :meth:`log_prob` is the observed *y* values.
     """
@@ -65,7 +96,7 @@ class ALD(torch.distributions.Distribution):
     has_rsample = False
 
     def __init__(self, m, lamda, kappa):
-        # Reshape lamda and kappa as (1, 1, T)
+        # Reshape lamda and kappa as (1, 1, Q)
         self.m = m
         self.lamda = lamda.view(1, 1, -1)
         self.kappa = kappa.view(1, 1, -1)
@@ -81,13 +112,54 @@ class ALD(torch.distributions.Distribution):
 
         Returns
         -------
-        logp : torch.Tensor with shape (S, N, T)
-            The log probability at the given values for each task.
+        logp : torch.Tensor with shape (S, N, Q)
+            The log probability at the given values for each quantile.
         """
-        # value: (N,), m: (S, N, T), lamda & kappa: (1, 1, T)
-        diff = value.unsqueeze(0) - self.m  # (S, N, T)
-        rho = diff * (self.kappa - (diff < 0).float())  # (S, N, T)
+        # value: (N,), m: (S, N, Q), lamda & kappa: (1, 1, Q)
+        diff = value.unsqueeze(0) - self.m  # (S, N, Q)
+        rho = diff * (self.kappa - (diff < 0).float())  # (S, N, Q)
         logp = (
             torch.log(self.kappa * (1 - self.kappa) / self.lamda) - rho / self.lamda
-        )  # (S, N, T)
+        )  # (S, N, Q)
         return logp
+
+
+class CenterGapALDLikelihood(torch.distributions.Distribution):
+    """ALD likelihood for multitask quantile regression with center-gap representation.
+
+    Parameters
+    ----------
+    q : torch.Tensor with shape (Q,)
+        The quantile levels.
+    """
+
+    def __init__(self, q):
+        super().__init__()
+        self.register_buffer("q", q.float())
+        self.register_parameter(
+            "raw_scales",
+            torch.nn.Parameter(torch.zeros(len(q))),
+        )
+        self.register_constraint("raw_scales", gpytorch.constraints.Positive())
+        central_quantile = self.q[torch.argmin(torch.abs(self.q - 0.5))]
+        self.lower_count = (self.q < central_quantile).count_nonzero()
+
+    @property
+    def scales(self):
+        return self.raw_scales_constraint.transform(self.raw_scales)
+
+    def forward(self, function_samples):
+        # function_samples: (S, N, T)
+        # S: Number of MC samples.
+        # N: Number of data points, i.e., length of x passed to gp(x).
+        # T: Number of tasks. First task must be the central quantile,
+        # followed by lower quantiles and then upper quantiles.
+        center = function_samples[:, :, :1]
+        lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
+        upper_gaps = function_samples[:, :, 1 + self.lower_count :]
+        quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
+        return ALD(
+            locs=quantiles,  # (S, N, Q)
+            scales=self.scales,  # (Q,)
+            taus=self.taus,  # (Q,)
+        )

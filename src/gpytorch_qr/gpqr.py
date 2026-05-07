@@ -196,7 +196,7 @@ class ALD(torch.distributions.Distribution):
 
 
 class ALDLikelihood(gpytorch.likelihoods.Likelihood):
-    """ALD likelihood for multiple quantile levels.
+    """ALD likelihood for batch quantile regression.
 
     Parameters
     ----------
