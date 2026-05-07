@@ -19,8 +19,8 @@
     taus = torch.tensor([0.05, 0.25, 0.5, 0.75, 0.95])
     true_quantiles = mean(x_range) + std(x_range) * Normal(0, 1).icdf(taus)
     import matplotlib.pyplot as plt
-    plt.scatter(x, y, c='k', marker='.')
-    plt.plot(x_range, true_quantiles, '--', c='gray')
+    plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
+    plt.plot(x_range, true_quantiles, '--', c='k')
 
 Prior mean function for the central quantile:
 
@@ -31,7 +31,7 @@ Prior mean function for the central quantile:
 
     class PriorMean(Mean):
         def forward(self, x):
-            return torch.cos(x * 2 * 3.14).squeeze()
+            return mean(x).squeeze()
     x_pred = torch.linspace(0, 1.5, 100).reshape(-1, 1)
     plt.scatter(x, y, c='k', marker='.')
     plt.plot(x_pred, PriorMean()(x_pred).detach(), c='r')
@@ -137,8 +137,8 @@ Evaluate:
     with torch.no_grad():
         quantiles = model(x_pred).detach()
 
-    plt.scatter(x, y, c='k', marker='.')
-    plt.plot(x_range, true_quantiles, '--', c='gray')
+    plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
+    plt.plot(x_range, true_quantiles, '--', c='k')
     plt.plot(x_pred, quantiles)
 """
 
@@ -146,10 +146,11 @@ import gpytorch
 import torch
 import torch.nn.functional as F
 
+from .likelihood import ALD
+
 __all__ = [
     "centergap_to_quantiles",
     "CenterGapGP",
-    "ALD",
     "CenterGapLikelihood",
     "CenterGapLmcVariationalStrategy",
     "MTGPQR",
@@ -164,14 +165,18 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     central : torch.Tensor with shape (..., 1)
         The central quantile values.
     lower_gaps : torch.Tensor with shape (..., L)
-        The lower gap values.
+        Pre-transformed lower gap values.
     upper_gaps : torch.Tensor with shape (..., U)
-        The upper gap values.
+        Pre-transformed upper gap values.
 
     Returns
     -------
     quantiles : torch.Tensor with shape (..., T)
         The quantile values.
+
+    Examples
+    --------
+
     """
     lower_gaps = F.softplus(lower_gaps)
     lower_quantiles = central - lower_gaps.flip(dims=[-1]).cumsum(dim=-1).flip(
@@ -213,56 +218,6 @@ class CenterGapGP(gpytorch.models.ApproximateGP):
         mean = torch.concatenate([center_mean.unsqueeze(0), gap_mean], dim=0)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
-
-
-class ALD(torch.distributions.Distribution):
-    """Batched asymmetric Laplace distribution.
-
-    Parameters
-    ----------
-    locs : torch.Tensor with shape (..., N, T)
-        The location parameters of the distribution.
-    scales : torch.Tensor with shape (T,)
-        The scale parameters of the distribution for each quantile.
-    taus : torch.Tensor with shape (T,)
-        The quantile levels of the distribution.
-    """
-
-    arg_constraints = {
-        "locs": torch.distributions.constraints.real,
-        "scales": torch.distributions.constraints.positive,
-        "taus": torch.distributions.constraints.unit_interval,
-    }
-    support = torch.distributions.constraints.real
-    has_rsample = False
-
-    def __init__(self, locs, scales, taus):
-        # Reshape scales and taus as (1, 1, ..., 1, T)
-        self.locs = locs
-        self.scales = scales.view(*([1] * (locs.ndim - 1)), -1)
-        self.taus = taus.view(*([1] * (locs.ndim - 1)), -1)
-        super().__init__(locs.size())
-
-    def log_prob(self, value):
-        """Log probability of the asymmetric Laplace distribution at the given value.
-
-        Parameters
-        ----------
-        value : torch.Tensor with shape (..., N)
-            The values at which to evaluate the log probability.
-
-        Returns
-        -------
-        logp : torch.Tensor with shape (..., N, T)
-            The log probability at the given values for each quantile.
-        """
-        # value: (N,), locs: (..., N, T), scales & taus: (1, ..., 1, T)
-        diff = value.unsqueeze(-1) - self.locs  # (..., N, T)
-        rho = diff * (self.taus - (diff < 0).float())  # (..., N, T)
-        logp = (
-            torch.log(self.taus * (1 - self.taus) / self.scales) - rho / self.scales
-        )  # (..., N, T)
-        return logp
 
 
 class CenterGapLikelihood(gpytorch.likelihoods.Likelihood):
