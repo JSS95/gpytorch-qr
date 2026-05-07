@@ -32,6 +32,7 @@ import torch.nn.functional as F
 
 __all__ = [
     "centergap_to_quantiles",
+    "CenterGapQuantileGP",
     "ALD",
     "CenterGapALDLikelihood",
 ]
@@ -64,6 +65,35 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
 
     ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=-1)
     return ret
+
+
+class CenterGapQuantileGP(gpytorch.models.ApproximateGP):
+    """Multitask approximate GP for multiple quantiles using center-gap representation.
+
+    Parameters
+    ----------
+    variational_strategy : gpytorch.variational.VariationalStrategy
+        The variational strategy for the Gaussian process.
+    center_mean : gpytorch.means.Mean
+        The mean module for the central quantile.
+    gap_mean : gpytorch.means.Mean
+        The mean module for the gaps between quantiles.
+    covar_module : gpytorch.kernels.Kernel
+        The covariance module for the Gaussian process.
+    """
+
+    def __init__(self, variational_strategy, center_mean, gap_mean, covar_module):
+        super().__init__(variational_strategy)
+        self.center_mean = center_mean
+        self.gap_mean = gap_mean
+        self.covar_module = covar_module
+
+    def forward(self, x):
+        center_mean = self.center_mean(x)
+        gap_mean = self.gap_mean(x)
+        mean = torch.concat([center_mean.unsqueeze(0), gap_mean], dim=0)
+        covar = self.covar_module(x)
+        return gpytorch.distributions.MultivariateNormal(mean, covar)
 
 
 class ALD(torch.distributions.Distribution):
