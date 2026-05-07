@@ -218,12 +218,17 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
-        # function_samples: (S, Q, N)
-        # S: Number of MC samples.
-        # Q: Number of quantiles.
-        # N: Number of data points, i.e., length of x passed to gp(x).
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape (S, Q, N)
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            and *N* is the number of data points.
+        """
         return ALD(
-            m=function_samples,
+            m=function_samples,  # (S, Q, N)
             lamda=self.scales,  # (Q,)
             kappa=self.q,  # (Q,)
         )

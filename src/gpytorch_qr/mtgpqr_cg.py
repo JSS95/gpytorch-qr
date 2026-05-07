@@ -52,8 +52,8 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
 
     Returns
     -------
-    quantiles : torch.Tensor with shape (..., T)
-        The quantile values. (T = L + U + 1)
+    quantiles : torch.Tensor with shape (..., Q)
+        The quantile values. (Q = L + U + 1)
     """
     lower_gaps = F.softplus(lower_gaps)
     lower_quantiles = central - lower_gaps.flip(dims=[-1]).cumsum(dim=-1).flip(
@@ -179,11 +179,19 @@ class CenterGapALDLikelihood(torch.distributions.Distribution):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
-        # function_samples: (S, N, T)
-        # S: Number of MC samples.
-        # N: Number of data points, i.e., length of x passed to gp(x).
-        # T: Number of tasks. First task must be the central quantile,
-        # followed by lower quantiles and then upper quantiles.
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape (S, N, 1 + L + U)
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *N* is the number of data points,
+            *L* is the number of lower quantiles, and *U* is the number of upper
+            quantiles.
+            The first channel corresponds to the central quantile,
+            the next *L* channels correspond to the lower gaps,
+            and the last *U* channels correspond to the upper gaps.
+        """
         center = function_samples[:, :, :1]
         lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
         upper_gaps = function_samples[:, :, 1 + self.lower_count :]
