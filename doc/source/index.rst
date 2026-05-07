@@ -7,10 +7,10 @@
 GPyTorch-QR documentation
 *************************
 
-GPyTorch-QR is a Python package for Gaussian process quantile regression using GPyTorch.
+GPyTorch-QR is a Python package for quantile regression using GPyTorch.
 
 Module reference
 ================
 
-.. automodule:: gpytorch_qr
+.. automodule:: gpytorch_qr.gpqr
     :members:

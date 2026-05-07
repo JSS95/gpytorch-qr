@@ -1,4 +1,7 @@
 """
+Batch Independent GPQR
+----------------------
+
 1D regression dataset with heteroskedastic noise:
 
 .. plot::
@@ -74,7 +77,7 @@ Train the model:
 
     for _ in range(200):
         output = gp(x)
-        loss = -mll(output, y)
+        loss = -mll(output, y).sum()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
