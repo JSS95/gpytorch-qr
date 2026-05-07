@@ -1,6 +1,8 @@
 import torch
 
-__all__ = ["ALD"]
+__all__ = [
+    "ALD",
+]
 
 
 class ALD(torch.distributions.Distribution):
