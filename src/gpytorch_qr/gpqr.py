@@ -82,7 +82,7 @@ Train the model:
         optimizer.step()
         optimizer.zero_grad()
 
-Evaluate:
+Evaluate (note that the predicted quantiles can cross since the GPs are independent):
 
 .. plot::
    :context: close-figs
