@@ -222,3 +222,8 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
             lamda=self.scales,  # (Q,)
             kappa=self.q,  # (Q,)
         )
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        # lp: (Q, N)
+        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return lp.sum(dim=0)  # (N,)
