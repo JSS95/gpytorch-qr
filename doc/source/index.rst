@@ -14,3 +14,6 @@ Module reference
 
 .. automodule:: gpytorch_qr.gpqr
     :members:
+
+.. automodule:: gpytorch_qr.mtgpqr_cg
+    :members:

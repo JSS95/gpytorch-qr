@@ -132,7 +132,7 @@ class QuantileGP(gpytorch.models.ApproximateGP):
 
 
 class ALD(torch.distributions.Distribution):
-    """Batched asymmetric Laplace distribution for quantile regression.
+    """Asymmetric Laplace distribution for batch quantile regression.
 
     Parameters
     ----------
@@ -145,8 +145,9 @@ class ALD(torch.distributions.Distribution):
 
     Notes
     -----
-    In the context of quantile regression, the location parameter *m* corresponds to
-    sample points drawn from posterior distributions of quantile functions.
+    In the context of batch quantile regression, the location parameter *m*
+    corresponds to sample points drawn from posterior distributions of quantile
+    functions.
     For *Q* quantiles, *S* samples are drawn for *N* data points.
 
     The value passed to :meth:`log_prob` is the observed *y* values.
