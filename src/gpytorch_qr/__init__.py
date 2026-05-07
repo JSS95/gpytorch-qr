@@ -146,7 +146,7 @@ import gpytorch
 import torch
 import torch.nn.functional as F
 
-from .likelihood import ALD
+from .ald import ALD
 
 __all__ = [
     "centergap_to_quantiles",
