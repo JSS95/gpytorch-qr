@@ -72,7 +72,7 @@ Train the model:
         lr=0.01,
     )
 
-    for _ in range(100):
+    for _ in range(200):
         output = gp(x)
         loss = -mll(output, y)
         loss.backward()
@@ -85,12 +85,13 @@ Evaluate:
    :context: close-figs
 
     gp.eval()
+    x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
         quantiles = gp(x_pred).mean.detach()
 
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
-    plt.plot(x_pred, quantiles)
+    plt.plot(x_pred, quantiles.T)
 """
 
 import gpytorch
