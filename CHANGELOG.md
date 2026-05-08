@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `gpytorch_qr.mtgpqr` is added for multi-task GPQR.
 
+### Changed
+
+- `gpytorch_qr.gpqr.ALD()` is moved to `gpytorch_qr.ald.BatchALD()`.
+- `gpytorch_qr.gpqr.ALDLikelihood()` is renamed to `gpytorch_qr.gpqr.BatchALDLikelihood()`.
+
 ## [0.2.0] - 2026-05-08
 
 ### Added

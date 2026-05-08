@@ -23,7 +23,7 @@
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch_qr.gpqr import BatchQuantileGP, ALDLikelihood
+    from gpytorch_qr.gpqr import BatchQuantileGP, BatchALDLikelihood
 
     class MyGP(BatchQuantileGP):
         def __init__(self, inducing_points, num_quantiles):
@@ -47,7 +47,7 @@
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyGP(inducing_points, len(q))
-    likelihood = ALDLikelihood(q)
+    likelihood = BatchALDLikelihood(q)
 
     from gpytorch.mlls import VariationalELBO
 
@@ -80,10 +80,11 @@
 import gpytorch
 import torch
 
+from .ald import BatchALD
+
 __all__ = [
     "BatchQuantileGP",
-    "ALD",
-    "ALDLikelihood",
+    "BatchALDLikelihood",
 ]
 
 
@@ -126,71 +127,7 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
         return self(x).mean
 
 
-class ALD(torch.distributions.Distribution):
-    """Asymmetric Laplace distribution for batch quantile regression.
-
-    Parameters
-    ----------
-    m : torch.Tensor with shape (S, Q, N)
-        The location parameters of the distribution.
-    lamda : torch.Tensor with shape (Q,)
-        The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape (Q,)
-        The quantile levels of the distribution.
-
-    Notes
-    -----
-    In the context of batch quantile regression, the location parameter *m*
-    corresponds to sample points drawn from posterior distributions of quantile
-    functions.
-    For *Q* quantiles, *S* samples are drawn for *N* data points.
-
-    The value passed to :meth:`log_prob` is the observed *y* values.
-    """
-
-    arg_constraints = {
-        "m": torch.distributions.constraints.real,
-        "lamda": torch.distributions.constraints.positive,
-        "kappa": torch.distributions.constraints.unit_interval,
-    }
-    support = torch.distributions.constraints.real
-    has_rsample = False
-
-    def __init__(self, m, lamda, kappa):
-        self.m = m
-        self.lamda = lamda.unsqueeze(-1)  # (Q, 1)
-        self.kappa = kappa.unsqueeze(-1)  # (Q, 1)
-        batch_shape = torch.broadcast_shapes(
-            m.shape, self.lamda.shape, self.kappa.shape
-        )
-        super().__init__(batch_shape=batch_shape, event_shape=torch.Size([]))
-
-    def log_prob(self, value):
-        """Log probability of the asymmetric Laplace distribution at the given value.
-
-        Parameters
-        ----------
-        value : torch.Tensor with shape (N,)
-            The values at which to evaluate the log probability.
-
-        Returns
-        -------
-        logp : torch.Tensor with shape (S, Q, N)
-            The log probability at the given values for each quantile and sample.
-        """
-        # value: (N,)
-        residual = value - self.m
-        check = residual * (self.kappa - (residual < 0).to(residual))
-        logp = (
-            torch.log(self.kappa)
-            + torch.log(1 - self.kappa)
-            - torch.log(self.lamda)
-            - check / self.lamda
-        )  # (S, Q, N)
-        return logp
-
-
-class ALDLikelihood(gpytorch.likelihoods.Likelihood):
+class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
     """ALD likelihood for batch quantile regression.
 
     Parameters
@@ -222,7 +159,7 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
             functions. *S* is the number of samples, *Q* is the number of quantiles,
             and *N* is the number of data points.
         """
-        return ALD(
+        return BatchALD(
             m=function_samples,  # (S, Q, N)
             lamda=self.scales,  # (Q,)
             kappa=self.q,  # (Q,)
