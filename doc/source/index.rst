@@ -13,38 +13,9 @@ GPyTorch-QR is a Python package for quantile regression using GPyTorch.
 Module reference
 ================
 
-Batch Independent GPQR
-----------------------
+.. toctree::
+   :maxdepth: 2
 
-.. automodule:: gpytorch_qr.gpqr
-    :members:
-
-Batch Independent GPQR (Center-gap representation)
---------------------------------------------------
-
-.. automodule:: gpytorch_qr.gpqr_cg
-    :members:
-
-Multitask GPQR
---------------
-
-.. automodule:: gpytorch_qr.mtgpqr
-    :members:
-
-Multitask GPQR (Center-gap representation)
-------------------------------------------
-
-.. automodule:: gpytorch_qr.mtgpqr_cg
-    :members:
-
-Asymmetric laplace distribution
--------------------------------
-
-.. automodule:: gpytorch_qr.ald
-    :members:
-
-Center-gap representation
--------------------------
-
-.. automodule:: gpytorch_qr.centergap
-    :members:
+   centergap_gpqr
+   direct_gpqr
+   utilities
