@@ -1,11 +1,8 @@
-"""
-Batch Independent GPQR
-----------------------
-
-1D regression dataset with heteroskedastic noise:
+"""GPQR with each quantile as independent batch GP.
 
 .. plot::
-   :context:
+   :context: reset
+   :include-source: False
 
     import torch
     from torch.distributions import Normal
@@ -21,14 +18,6 @@ Batch Independent GPQR
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
     true_quantiles = mean(x_range) + std(x_range) * Normal(0, 1).icdf(q)
-    import matplotlib.pyplot as plt
-    plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
-    plt.plot(x_range, true_quantiles, '--', c='k')
-
-Define GP:
-
-.. plot::
-   :context: close-figs
 
     from gpytorch.variational import CholeskyVariationalDistribution
     from gpytorch.variational import VariationalStrategy
@@ -60,11 +49,6 @@ Define GP:
     gp = MyQuantileGP(inducing_points, len(q))
     likelihood = ALDLikelihood(q)
 
-Train the model:
-
-.. plot::
-   :context: close-figs
-
     from gpytorch.mlls import VariationalELBO
 
     gp.train()
@@ -75,23 +59,19 @@ Train the model:
         lr=0.01,
     )
 
-    for _ in range(200):
+    for _ in range(100):
         output = gp(x)
         loss = -mll(output, y).sum()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-Evaluate (note that the predicted quantiles can cross since the GPs are independent):
-
-.. plot::
-   :context: close-figs
-
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
         quantiles = gp(x_pred).mean.detach()
 
+    import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
     plt.plot(x_pred, quantiles.T)
@@ -132,7 +112,7 @@ class QuantileGP(gpytorch.models.ApproximateGP):
 
 
 class ALD(torch.distributions.Distribution):
-    """Batched asymmetric Laplace distribution for quantile regression.
+    """Asymmetric Laplace distribution for batch quantile regression.
 
     Parameters
     ----------
@@ -145,8 +125,9 @@ class ALD(torch.distributions.Distribution):
 
     Notes
     -----
-    In the context of quantile regression, the location parameter *m* corresponds to
-    sample points drawn from posterior distributions of quantile functions.
+    In the context of batch quantile regression, the location parameter *m*
+    corresponds to sample points drawn from posterior distributions of quantile
+    functions.
     For *Q* quantiles, *S* samples are drawn for *N* data points.
 
     The value passed to :meth:`log_prob` is the observed *y* values.
@@ -195,7 +176,7 @@ class ALD(torch.distributions.Distribution):
 
 
 class ALDLikelihood(gpytorch.likelihoods.Likelihood):
-    """ALD likelihood for multiple quantile levels.
+    """ALD likelihood for batch quantile regression.
 
     Parameters
     ----------
@@ -217,12 +198,17 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
-        # function_samples: (S, Q, N)
-        # S: Number of MC samples.
-        # Q: Number of quantiles.
-        # N: Number of data points, i.e., length of x passed to gp(x).
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape (S, Q, N)
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            and *N* is the number of data points.
+        """
         return ALD(
-            m=function_samples,
+            m=function_samples,  # (S, Q, N)
             lamda=self.scales,  # (Q,)
             kappa=self.q,  # (Q,)
         )
