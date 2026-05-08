@@ -173,10 +173,6 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     -------
     quantiles : torch.Tensor with shape (..., T)
         The quantile values.
-
-    Examples
-    --------
-
     """
     lower_gaps = F.softplus(lower_gaps)
     lower_quantiles = central - lower_gaps.flip(dims=[-1]).cumsum(dim=-1).flip(
