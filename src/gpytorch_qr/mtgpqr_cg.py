@@ -1,11 +1,11 @@
 """
+------------------------------------------
 Multitask GPQR (Center-gap representation)
 ------------------------------------------
 
-1D regression dataset with heteroskedastic noise:
-
 .. plot::
    :context: reset
+   :include-source: False
 
     import torch
     from torch.distributions import Normal
@@ -21,14 +21,6 @@ Multitask GPQR (Center-gap representation)
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
     true_quantiles = mean(x_range) + std(x_range) * Normal(0, 1).icdf(q)
-    import matplotlib.pyplot as plt
-    plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
-    plt.plot(x_range, true_quantiles, '--', c='k')
-
-Define GP:
-
-.. plot::
-   :context: close-figs
 
     from gpytorch.variational import CholeskyVariationalDistribution
     from gpytorch.variational import VariationalStrategy
@@ -83,11 +75,6 @@ Define GP:
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents,  num_latents // 2)
     likelihood = CenterGapALDLikelihood(q, central_q_index)
 
-Train the model:
-
-.. plot::
-   :context: close-figs
-
     from gpytorch.mlls import VariationalELBO
 
     gp.train()
@@ -98,23 +85,19 @@ Train the model:
         lr=0.01,
     )
 
-    for _ in range(200):
+    for _ in range(100):
         output = gp(x)
         loss = -mll(output, y)
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-Evaluate:
-
-.. plot::
-   :context: close-figs
-
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
         quantiles = gp.mean_quantiles(x_pred, central_q_index)
 
+    import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
     plt.plot(x_pred, quantiles)

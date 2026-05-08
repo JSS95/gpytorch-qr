@@ -1,11 +1,11 @@
 """
+----------------------
 Batch Independent GPQR
 ----------------------
 
-1D regression dataset with heteroskedastic noise:
-
 .. plot::
    :context: reset
+   :include-source: False
 
     import torch
     from torch.distributions import Normal
@@ -21,14 +21,6 @@ Batch Independent GPQR
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
     true_quantiles = mean(x_range) + std(x_range) * Normal(0, 1).icdf(q)
-    import matplotlib.pyplot as plt
-    plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
-    plt.plot(x_range, true_quantiles, '--', c='k')
-
-Define GP:
-
-.. plot::
-   :context: close-figs
 
     from gpytorch.variational import CholeskyVariationalDistribution
     from gpytorch.variational import VariationalStrategy
@@ -60,11 +52,6 @@ Define GP:
     gp = MyQuantileGP(inducing_points, len(q))
     likelihood = ALDLikelihood(q)
 
-Train the model:
-
-.. plot::
-   :context: close-figs
-
     from gpytorch.mlls import VariationalELBO
 
     gp.train()
@@ -75,23 +62,19 @@ Train the model:
         lr=0.01,
     )
 
-    for _ in range(200):
+    for _ in range(100):
         output = gp(x)
         loss = -mll(output, y).sum()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
 
-Evaluate (note that the predicted quantiles can cross since the GPs are independent):
-
-.. plot::
-   :context: close-figs
-
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
         quantiles = gp(x_pred).mean.detach()
 
+    import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
     plt.plot(x_pred, quantiles.T)
