@@ -19,8 +19,20 @@ Batch Independent GPQR
 .. automodule:: gpytorch_qr.gpqr
     :members:
 
+Multitask GPQR
+--------------
+
+.. automodule:: gpytorch_qr.mtgpqr
+    :members:
+
 Multitask GPQR (Center-gap representation)
 ------------------------------------------
 
 .. automodule:: gpytorch_qr.mtgpqr_cg
+    :members:
+
+Asymmetric laplace distribution
+-------------------------------
+
+.. automodule:: gpytorch_qr.ald
     :members:
