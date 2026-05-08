@@ -25,7 +25,7 @@
     from gpytorch.kernels import RBFKernel, ScaleKernel
     from gpytorch_qr.gpqr import BatchQuantileGP, ALDLikelihood
 
-    class MyQuantileGP(BatchQuantileGP):
+    class MyGP(BatchQuantileGP):
         def __init__(self, inducing_points, num_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -46,7 +46,7 @@
             super().__init__(variational_strategy, mean, covar)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
-    gp = MyQuantileGP(inducing_points, len(q))
+    gp = MyGP(inducing_points, len(q))
     likelihood = ALDLikelihood(q)
 
     from gpytorch.mlls import VariationalELBO
