@@ -23,9 +23,9 @@
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch_qr.gpqr import QuantileGP, ALDLikelihood
+    from gpytorch_qr.gpqr import BatchQuantileGP, ALDLikelihood
 
-    class MyQuantileGP(QuantileGP):
+    class MyQuantileGP(BatchQuantileGP):
         def __init__(self, inducing_points, num_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -81,13 +81,13 @@ import gpytorch
 import torch
 
 __all__ = [
-    "QuantileGP",
+    "BatchQuantileGP",
     "ALD",
     "ALDLikelihood",
 ]
 
 
-class QuantileGP(gpytorch.models.ApproximateGP):
+class BatchQuantileGP(gpytorch.models.ApproximateGP):
     """Batch approximate GP for multiple quantiles.
 
     Parameters
