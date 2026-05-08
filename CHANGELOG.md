@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `gpytorch_qr.mtgpqr` is added for multi-task GPQR.
+- `gpytorch_qr.gpqr_cg` is added for batch GPQR with center-gap representation.
 
 ### Changed
 
