@@ -1,3 +1,5 @@
+"""Asymmetric Laplace distributions for quantile regression."""
+
 import torch
 
 __all__ = [

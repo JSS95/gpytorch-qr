@@ -26,12 +26,12 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
     from gpytorch_qr.mtgpqr_cg import (
-        CenterGapQuantileGP,
+        MultitaskCenterGapQuantileGP,
         CenterGapLmcVariationalStrategy,
-        CenterGapALDLikelihood,
+        MultitaskCenterGapALDLikelihood,
     )
 
-    class MyGP(CenterGapQuantileGP):
+    class MyGP(MultitaskCenterGapQuantileGP):
         def __init__(
             self,
             inducing_points,
@@ -72,7 +72,7 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
     central_q_index = 2
     num_latents = 7
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
-    likelihood = CenterGapALDLikelihood(q, central_q_index)
+    likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
 
     from gpytorch.mlls import VariationalELBO
 
@@ -104,47 +104,18 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
 
 import gpytorch
 import torch
-import torch.nn.functional as F
 
 from .ald import MultitaskALD
+from .centergap import centergap_to_quantiles
 
 __all__ = [
-    "centergap_to_quantiles",
-    "CenterGapQuantileGP",
-    "CenterGapALDLikelihood",
+    "MultitaskCenterGapQuantileGP",
+    "MultitaskCenterGapALDLikelihood",
+    "CenterGapLmcVariationalStrategy",
 ]
 
 
-def centergap_to_quantiles(central, lower_gaps, upper_gaps):
-    """Convert center-gap representation to quantiles.
-
-    Parameters
-    ----------
-    central : torch.Tensor with shape (..., 1)
-        The central quantile values.
-    lower_gaps : torch.Tensor with shape (..., L)
-        Pre-transformed lower gap values.
-    upper_gaps : torch.Tensor with shape (..., U)
-        Pre-transformed upper gap values.
-
-    Returns
-    -------
-    quantiles : torch.Tensor with shape (..., Q)
-        The quantile values. (Q = L + U + 1)
-    """
-    lower_gaps = F.softplus(lower_gaps)
-    lower_quantiles = central - lower_gaps.flip(dims=[-1]).cumsum(dim=-1).flip(
-        dims=[-1]
-    )
-
-    upper_gaps = F.softplus(upper_gaps)
-    upper_quantiles = central + upper_gaps.cumsum(dim=-1)
-
-    ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=-1)
-    return ret
-
-
-class CenterGapQuantileGP(gpytorch.models.ApproximateGP):
+class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
     """Multitask approximate GP for multiple quantiles using center-gap representation.
 
     Parameters
@@ -194,7 +165,7 @@ class CenterGapQuantileGP(gpytorch.models.ApproximateGP):
         return centergap_to_quantiles(median, lower_gaps, upper_gaps)
 
 
-class CenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
+class MultitaskCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
     """ALD likelihood for multitask quantile regression with center-gap representation.
 
     Parameters
