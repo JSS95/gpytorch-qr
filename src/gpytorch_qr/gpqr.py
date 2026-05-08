@@ -69,7 +69,7 @@
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        quantiles = gp(x_pred).mean.detach()
+        quantiles = gp.mean_quantiles(x_pred).detach()
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
@@ -109,6 +109,21 @@ class QuantileGP(gpytorch.models.ApproximateGP):
         mean = self.mean_module(x)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
+
+    def mean_quantiles(self, x):
+        """Predict quantiles by posterior mean.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (Q, N)
+            The predicted quantiles at the input locations.
+        """
+        return self(x).mean
 
 
 class ALD(torch.distributions.Distribution):
