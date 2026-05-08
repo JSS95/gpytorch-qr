@@ -53,7 +53,7 @@ Latent GPs directly construct quantiles.
             super().__init__(variational_strategy, mean_module, covar_module)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
-    gp = MyGP(inducing_points, len(q), num_latents=7)
+    gp = MyGP(inducing_points, len(q), num_latents=len(q))
     likelihood = MultitaskALDLikelihood(q)
 
     from gpytorch.mlls import VariationalELBO

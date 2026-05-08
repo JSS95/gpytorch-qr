@@ -70,7 +70,7 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
-    num_latents = 7
+    num_latents = len(q)
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
     likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
 
