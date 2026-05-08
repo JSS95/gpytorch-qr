@@ -9,7 +9,7 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
     import torch
     from torch.distributions import Normal
 
-    torch.manual_seed(42)    
+    torch.manual_seed(42)
 
     def mean(x):
         return torch.cos(x * 2 * 3.14)
