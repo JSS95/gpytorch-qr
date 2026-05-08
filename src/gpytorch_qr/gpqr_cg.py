@@ -1,6 +1,4 @@
-"""Multitask GPQR with center-gap representation.
-
-Latent GPs model the central quantile and the gaps between quantiles separately.
+"""Batch independent GPQR with center-gap representation.
 
 .. plot::
    :context: reset
@@ -25,54 +23,39 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
     from gpytorch.variational import VariationalStrategy
     from gpytorch.means import ConstantMean
     from gpytorch.kernels import RBFKernel, ScaleKernel
-    from gpytorch_qr.mtgpqr_cg import (
-        MultitaskCenterGapQuantileGP,
-        CenterGapLmcVariationalStrategy,
-        MultitaskCenterGapALDLikelihood,
+    from gpytorch_qr.gpqr_cg import (
+        BatchCenterGapQuantileGP,
+        BatchCenterGapALDLikelihood,
     )
 
-    class MyGP(MultitaskCenterGapQuantileGP):
-        def __init__(
-            self,
-            inducing_points,
-            num_quantiles,
-            num_lower_quantiles,
-            num_latents,
-            num_lower_latents,
-        ):
+    class MyGP(BatchCenterGapQuantileGP):
+        def __init__(self, inducing_points, num_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
                 N,
-                batch_shape=torch.Size([num_latents]),
+                batch_shape=torch.Size([num_quantiles]),
             )
-            variational_strategy = CenterGapLmcVariationalStrategy(
-                VariationalStrategy(
-                    self,
-                    inducing_points,
-                    variational_distribution,
-                    learn_inducing_locations=True,
-                ),
-                num_quantiles=num_quantiles,
-                num_latents=num_latents,
-                num_lower_quantiles=num_lower_quantiles,
-                num_lower_latents=num_lower_latents,
+            variational_strategy = VariationalStrategy(
+                self,
+                inducing_points,
+                variational_distribution,
+                learn_inducing_locations=True,
             )
 
             center_mean = ConstantMean()
             gap_mean = ConstantMean(
-                batch_shape=torch.Size([num_latents - 1])
+                batch_shape=torch.Size([num_quantiles - 1])
             )
-            covar_module = ScaleKernel(
-                RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
-                batch_shape=torch.Size([num_latents]),
+            covar = ScaleKernel(
+                RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
+                batch_shape=torch.Size([num_quantiles]),
             )
-            super().__init__(variational_strategy, center_mean, gap_mean, covar_module)
+            super().__init__(variational_strategy, center_mean, gap_mean, covar)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
-    num_latents = len(q)
-    gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
-    likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
+    gp = MyGP(inducing_points, len(q))
+    likelihood = BatchCenterGapALDLikelihood(q, central_q_index)
 
     from gpytorch.mlls import VariationalELBO
 
@@ -86,7 +69,7 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
 
     for _ in range(100):
         output = gp(x)
-        loss = -mll(output, y)
+        loss = -mll(output, y).sum()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
@@ -99,24 +82,23 @@ Latent GPs model the central quantile and the gaps between quantiles separately.
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
-    plt.plot(x_pred, quantiles)
+    plt.plot(x_pred, quantiles.T)
 """
 
 import gpytorch
 import torch
 
-from .ald import MultitaskALD
+from .ald import BatchALD
 from .centergap import centergap_to_quantiles
 
 __all__ = [
-    "MultitaskCenterGapQuantileGP",
-    "MultitaskCenterGapALDLikelihood",
-    "CenterGapLmcVariationalStrategy",
+    "BatchCenterGapQuantileGP",
+    "BatchCenterGapALDLikelihood",
 ]
 
 
-class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
-    """Multitask approximate GP for multiple quantiles using center-gap representation.
+class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP):
+    """Batch approximate GP for multiple quantiles using center-gap representation.
 
     Parameters
     ----------
@@ -155,18 +137,18 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (N, Q)
+        quantiles : torch.Tensor with shape (Q, N)
             The predicted quantiles at the input locations.
         """
-        function_means = self(x).mean  # (N, Q)
+        function_means = self(x).mean.T  # (N, Q)
         median = function_means[..., :1]
         lower_gaps = function_means[..., 1 : 1 + num_lower_quantiles]
         upper_gaps = function_means[..., 1 + num_lower_quantiles :]
-        return centergap_to_quantiles(median, lower_gaps, upper_gaps)
+        return centergap_to_quantiles(median, lower_gaps, upper_gaps).T
 
 
-class MultitaskCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
-    """ALD likelihood for multitask quantile regression with center-gap representation.
+class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
+    """ALD likelihood for batch quantile regression with center-gap representation.
 
     Parameters
     ----------
@@ -196,84 +178,27 @@ class MultitaskCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, N, 1 + L + U)
+        function_samples : torch.Tensor with shape (S, 1 + L + U, N)
             The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *N* is the number of data points,
-            *L* is the number of lower quantiles, and *U* is the number of upper
-            quantiles.
-            The first channel corresponds to the central quantile,
-            the next *L* channels correspond to the lower gaps,
-            and the last *U* channels correspond to the upper gaps.
+            functions. *S* is the number of samples, *L* is the number of lower
+            quantiles, *U* is the number of upper quantiles, and *N* is the number of
+            data points,
+            The first dimension in the second axis corresponds to the central quantile,
+            followed by lower quantiles and then upper quantiles.
         """
+        function_samples = function_samples.permute(0, 2, 1)  # (S, N, Q)
         center = function_samples[:, :, :1]
         lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
         upper_gaps = function_samples[:, :, 1 + self.lower_count :]
         quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
-        return MultitaskALD(
-            m=quantiles,  # (S, N, Q)
+        quantiles = quantiles.permute(0, 2, 1)  # (S, Q, N)
+        return BatchALD(
+            m=quantiles,  # (S, Q, N)
             lamda=self.scales,  # (Q,)
             kappa=self.q,  # (Q,)
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        lp = super().expected_log_prob(
-            observations, function_dist, *args, **kwargs
-        )  # (N, Q)
-        return lp.sum(dim=1)  # (N,)
-
-
-class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
-    """LMC variational strategy for the center-gap quantile regression model.
-
-    This class modifies the standard LMC coefficients to fit the center-gap
-    representation.
-    The first latent function directly represents the central quantile, and it
-    does not form any linear combinations with the other latent functions.
-    The remaining latent functions are linearly combined to model the gap
-    functions between quantiles. Upper and lower gap functions are modeled
-    separately.
-    """
-
-    def __init__(
-        self,
-        base_variational_strategy,
-        num_quantiles,  # Q
-        num_latents,  # T
-        num_lower_quantiles,
-        num_lower_latents,
-        latent_dim=-1,
-        jitter_val=None,
-    ):
-        super().__init__(
-            base_variational_strategy,
-            num_quantiles,
-            num_latents,
-            latent_dim,
-            jitter_val,
-        )
-        lmc_coefficients = self.lmc_coefficients.detach().clone()  # (T, Q)
-        del self.lmc_coefficients
-
-        num_upper_quantiles = num_quantiles - num_lower_quantiles - 1
-        num_upper_latents = num_latents - num_lower_latents - 1
-        self.register_buffer("g0_coeff", torch.ones((1, 1)))
-        self.register_parameter(
-            "lower_lmc_coefficients",
-            torch.nn.Parameter(
-                lmc_coefficients[1 : 1 + num_lower_latents, 1 : 1 + num_lower_quantiles]
-            ),
-        )
-        self.register_parameter(
-            "upper_lmc_coefficients",
-            torch.nn.Parameter(
-                lmc_coefficients[-num_upper_latents:, -num_upper_quantiles:]
-            ),
-        )
-
-    @property
-    def lmc_coefficients(self):
-        return torch.block_diag(
-            self.g0_coeff,
-            self.lower_lmc_coefficients,
-            self.upper_lmc_coefficients,
-        )
+        # lp: (Q, N)
+        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return lp.sum(dim=0)  # (N,)

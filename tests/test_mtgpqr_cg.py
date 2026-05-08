@@ -5,9 +5,9 @@ from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
 from gpytorch_qr.mtgpqr_cg import (
-    CenterGapALDLikelihood,
     CenterGapLmcVariationalStrategy,
-    CenterGapQuantileGP,
+    MultitaskCenterGapALDLikelihood,
+    MultitaskCenterGapQuantileGP,
 )
 
 
@@ -23,7 +23,7 @@ def test_mtgpqr_cg():
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
-    class MyGP(CenterGapQuantileGP):
+    class MyGP(MultitaskCenterGapQuantileGP):
         def __init__(
             self,
             inducing_points,
@@ -62,7 +62,7 @@ def test_mtgpqr_cg():
     central_q_index = 2
     num_latents = 7
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
-    likelihood = CenterGapALDLikelihood(q, central_q_index)
+    likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()
