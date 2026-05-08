@@ -158,7 +158,7 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         quantiles : torch.Tensor with shape (N, Q)
             The predicted quantiles at the input locations.
         """
-        function_means = self(x).mean
+        function_means = self(x).mean  # (N, Q)
         median = function_means[..., :1]
         lower_gaps = function_means[..., 1 : 1 + num_lower_quantiles]
         upper_gaps = function_means[..., 1 + num_lower_quantiles :]
