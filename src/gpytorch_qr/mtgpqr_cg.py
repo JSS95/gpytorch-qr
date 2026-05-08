@@ -5,7 +5,7 @@ Multitask GPQR (Center-gap representation)
 1D regression dataset with heteroskedastic noise:
 
 .. plot::
-   :context:
+   :context: reset
 
     import torch
     from torch.distributions import Normal
