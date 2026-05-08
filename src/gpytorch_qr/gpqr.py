@@ -1,7 +1,4 @@
-"""
-----------------------
-Batch Independent GPQR
-----------------------
+"""GPQR with each quantile as independent batch GP.
 
 .. plot::
    :context: reset

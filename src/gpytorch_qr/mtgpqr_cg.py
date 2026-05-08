@@ -1,7 +1,4 @@
-"""
-------------------------------------------
-Multitask GPQR (Center-gap representation)
-------------------------------------------
+"""GPQR with multitask center-gap representation.
 
 .. plot::
    :context: reset
