@@ -9,9 +9,6 @@
 
 Gaussian process quantile regression using GPyTorch.
 
-This packages simultaneously models quantile functions with different quantile levels.
-Non-crossing property is guaranteed by modeling the central quantiles and gaps between quantile functions, which is referred to as the 'center-gap representation'.
-
 ## Installation
 
 ```
