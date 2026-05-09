@@ -9,6 +9,10 @@ GPyTorch-QR documentation
 
 GPyTorch-QR is a Python package for quantile regression using GPyTorch.
 
+========
+Tutorial
+========
+
 ================
 Module reference
 ================
@@ -19,3 +23,11 @@ Module reference
    centergap_gpqr
    direct_gpqr
    utilities
+
+==================
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`

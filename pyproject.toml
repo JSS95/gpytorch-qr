@@ -47,11 +47,14 @@ doc = [
     "numpydoc",
     "pydata_sphinx_theme",
     "matplotlib",
+    "myst-nb",
 ]
 dev = [
     "flake8",
-    "black",
+    "black[jupyter]",
     "isort",
+    "nbconvert",
+    "nbstripout",
     "gpytorch-qr[test,doc]",
 ]
 

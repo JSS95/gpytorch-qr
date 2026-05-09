@@ -37,3 +37,11 @@ Document will be generated in `build/html` directory. Open `index.html` to see t
 ### Installation
 
 For development features, you must install the package by `pip install -e .[dev]`.
+
+### Re-building examples
+
+Then build the examples:
+
+```
+jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
+```
