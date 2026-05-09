@@ -43,7 +43,7 @@ For development features, you must install the package by `pip install -e .[dev]
 Configure the local git filter (run once after cloning):
 
 ```
-git config filter.nbstripout.clean "nbstripout --keep-output --extra-keys 'metadata.kernelspec metadata.language_info cell.metadata.execution'"
+git config filter.nbstripout.clean "nbstripout --keep-output --keep-metadata-keys 'metadata.language_info'"
 git config filter.nbstripout.smudge cat
 git config filter.nbstripout.required true
 ```

@@ -48,7 +48,6 @@ doc = [
     "pydata_sphinx_theme",
     "matplotlib",
     "myst-nb",
-    "ipython",
 ]
 dev = [
     "flake8",

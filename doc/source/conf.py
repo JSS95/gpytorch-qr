@@ -6,16 +6,6 @@
 import os
 import shutil
 
-# Ensure ipython3 Pygments lexer is available for myst-nb
-# (Pygments entry point discovery can fail in some CI environments)
-try:
-    import pygments.lexers
-    from IPython.lib.lexers import IPython3Lexer
-
-    pygments.lexers._lexer_cache["ipython3"] = IPython3Lexer
-except ImportError:
-    pass
-
 examples_source = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "examples")
 )
