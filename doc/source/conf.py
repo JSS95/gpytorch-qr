@@ -57,3 +57,5 @@ html_theme_options = {
 
 plot_html_show_formats = False
 plot_html_show_source_link = False
+
+nb_execution_mode = "off"
