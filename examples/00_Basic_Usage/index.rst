@@ -3,6 +3,8 @@ Basic Usage
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    gpqr.ipynb
+   gpqr_cg.ipynb
+   mtgpqr.ipynb
+   mtgpqr_cg.ipynb
