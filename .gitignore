@@ -1,6 +1,8 @@
 doc/source/examples/
 
 .vscode
+build-examples.sh
+slurm*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
