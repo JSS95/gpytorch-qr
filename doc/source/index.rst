@@ -19,6 +19,16 @@ Tutorial
 
    examples/tutorial.ipynb
 
+========
+Examples
+========
+
+.. toctree::
+   :glob:
+   :maxdepth: 1
+
+   examples/**/index
+
 ================
 Module reference
 ================
