@@ -51,5 +51,5 @@ git config filter.nbstripout.required true
 Then build the examples:
 
 ```
-jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
+jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb examples/**/*.ipynb
 ```
