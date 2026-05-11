@@ -3,6 +3,18 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import os
+import shutil
+
+examples_source = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "examples")
+)
+examples_dest = os.path.abspath(os.path.join(os.path.dirname(__file__), "examples"))
+
+if os.path.exists(examples_dest):
+    shutil.rmtree(examples_dest)
+shutil.copytree("../../examples", "examples")
+
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
@@ -17,7 +29,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
     "numpydoc",
-    "matplotlib.sphinxext.plot_directive",
+    "myst_nb",
 ]
 
 autodoc_member_order = "bysource"
@@ -44,3 +56,5 @@ html_theme_options = {
 
 plot_html_show_formats = False
 plot_html_show_source_link = False
+
+nb_execution_mode = "off"

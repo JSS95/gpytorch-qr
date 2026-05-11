@@ -37,3 +37,19 @@ Document will be generated in `build/html` directory. Open `index.html` to see t
 ### Installation
 
 For development features, you must install the package by `pip install -e .[dev]`.
+
+### Re-building examples
+
+Configure the local git filter (run once after cloning):
+
+```
+git config filter.nbstripout.clean "nbstripout --keep-output --keep-metadata-keys 'metadata.language_info'"
+git config filter.nbstripout.smudge cat
+git config filter.nbstripout.required true
+```
+
+Then build the examples:
+
+```
+jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb examples/**/*.ipynb
+```

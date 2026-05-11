@@ -1,8 +1,8 @@
 """Batch independent GPQR with center-gap representation.
 
-.. plot::
-   :context: reset
-   :include-source: False
+.. code-block:: python
+   :caption: Example
+   :linenos:
 
     import torch
     from torch.distributions import Normal
@@ -55,7 +55,7 @@
             super().__init__(variational_strategy, center_mean, gap_mean, covar)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
-    central_q_index = 2
+    central_q_index = (q - 0.5).abs().argmin().item()
     gp = MyGP(inducing_points, len(q))
     likelihood = BatchCenterGapALDLikelihood(q, central_q_index)
 
@@ -66,10 +66,10 @@
     mll = VariationalELBO(likelihood, gp, num_data=y.numel())
     optimizer = torch.optim.Adam(
         list(gp.parameters()) + list(likelihood.parameters()),
-        lr=0.01,
+        lr=0.001,
     )
 
-    for _ in range(100):
+    for _ in range(1000):
         output = gp(x)
         loss = -mll(output, y).sum()
         loss.backward()
