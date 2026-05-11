@@ -2,6 +2,9 @@
 
 Latent GPs directly construct quantiles.
 
+It is recommended to use fewer latent GPs than the number of tasks(=quantiles)
+to model the correlation structure.
+
 .. plot::
    :context: reset
    :include-source: False
@@ -55,7 +58,8 @@ Latent GPs directly construct quantiles.
             super().__init__(variational_strategy, mean_module, covar_module)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
-    gp = MyGP(inducing_points, len(q), num_latents=len(q))
+    num_latents = len(q) - 2  # recommended to be smaller than q
+    gp = MyGP(inducing_points, len(q), num_latents=num_latents)
     likelihood = MultitaskALDLikelihood(q)
 
     from gpytorch.mlls import VariationalELBO
