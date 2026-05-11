@@ -55,7 +55,7 @@
             super().__init__(variational_strategy, center_mean, gap_mean, covar)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
-    central_q_index = 2
+    central_q_index = (q - 0.5).abs().argmin().item()
     gp = MyGP(inducing_points, len(q))
     likelihood = BatchCenterGapALDLikelihood(q, central_q_index)
 
