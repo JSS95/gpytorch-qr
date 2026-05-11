@@ -127,10 +127,6 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
             Marginal posterior over quantiles at input locations.
             ``loc`` has shape (Q, N) and ``scale`` has shape (Q, N),
             where *Q* is the number of quantiles and *N* is the number of data points.
-
-        Notes
-        -----
-        This posterior only captures the epistemic uncertainty of quantiles.
         """
         dist = self(x)
         return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
@@ -164,8 +160,8 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
         Parameters
         ----------
         function_samples : torch.Tensor with shape (S, Q, N)
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            The function samples drawn from the posterior of quantile functions.
+            *S* is the number of samples, *Q* is the number of quantiles,
             and *N* is the number of data points.
         """
         return BatchALD(
