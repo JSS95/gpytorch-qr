@@ -71,12 +71,12 @@
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        quantiles = gp.mean_quantiles(x_pred).detach()
+        q_posterior = gp.quantile_posterior(x_pred)
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
-    plt.plot(x_pred, quantiles.T)
+    plt.plot(x_pred, q_posterior.mean.T)
 """
 
 import gpytorch
@@ -113,8 +113,8 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
-    def mean_quantiles(self, x):
-        """Predict quantiles by posterior mean.
+    def quantile_posterior(self, x):
+        """Marginal posterior over quantiles.
 
         Parameters
         ----------
@@ -123,10 +123,17 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (Q, N)
-            The predicted quantiles at the input locations.
+        distribution : torch.distributions.Normal
+            Marginal posterior over quantiles at input locations.
+            ``loc`` has shape (Q, N) and ``scale`` has shape (Q, N),
+            where *Q* is the number of quantiles and *N* is the number of data points.
+
+        Notes
+        -----
+        This posterior only captures the epistemic uncertainty of quantiles.
         """
-        return self(x).mean
+        dist = self(x)
+        return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
 
 
 class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
