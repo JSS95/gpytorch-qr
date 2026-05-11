@@ -1,8 +1,8 @@
 """Batch independent GPQR with center-gap representation.
 
-.. plot::
-   :context: reset
-   :include-source: False
+.. code-block:: python
+   :caption: Example
+   :linenos:
 
     import torch
     from torch.distributions import Normal
@@ -66,10 +66,10 @@
     mll = VariationalELBO(likelihood, gp, num_data=y.numel())
     optimizer = torch.optim.Adam(
         list(gp.parameters()) + list(likelihood.parameters()),
-        lr=0.01,
+        lr=0.001,
     )
 
-    for _ in range(100):
+    for _ in range(1000):
         output = gp(x)
         loss = -mll(output, y).sum()
         loss.backward()

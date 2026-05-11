@@ -29,7 +29,6 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
     "numpydoc",
-    "matplotlib.sphinxext.plot_directive",
     "myst_nb",
 ]
 

@@ -5,9 +5,9 @@ Latent GPs directly construct quantiles.
 It is recommended to use fewer latent GPs than the number of tasks(=quantiles)
 to model the correlation structure.
 
-.. plot::
-   :context: reset
-   :include-source: False
+.. code-block:: python
+   :caption: Example
+   :linenos:
 
     import torch
     from torch.distributions import Normal
@@ -69,10 +69,10 @@ to model the correlation structure.
     mll = VariationalELBO(likelihood, gp, num_data=y.numel())
     optimizer = torch.optim.Adam(
         list(gp.parameters()) + list(likelihood.parameters()),
-        lr=0.01,
+        lr=0.001,
     )
 
-    for _ in range(100):
+    for _ in range(1000):
         output = gp(x)
         loss = -mll(output, y)
         loss.backward()
