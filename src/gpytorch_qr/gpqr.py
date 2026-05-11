@@ -178,3 +178,31 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
         # lp: (Q, N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=0)  # (N,)
+
+    def predictive_posterior(self, quantile_posterior):
+        """Predictive posterior distribution of function values.
+
+        Parameters
+        ----------
+        quantile_posterior : gpytorch.distributions.MultivariateNormal
+            The joint posterior over quantiles at input locations.
+
+        Returns
+        -------
+        samples : torch.Tensor with shape (S, Q, N)
+            Samples drawn from the predictive posterior distribution of function values.
+
+        Examples
+        --------
+        Get 95% predictive intervals:
+
+        .. code-block:: python
+
+            with torch.no_grad(), gpytorch.settings.num_likelihood_samples(1000):
+                pp_dist = gp(x_pred)
+            ci_lower = pp_dist.quantile(0.025, dim=0)
+            ci_upper = pp_dist.quantile(0.975, dim=0)
+        """
+        ald = self(quantile_posterior)  # (S, Q, N)
+        u = torch.rand_like(ald.m)
+        return ald.icdf(u)
