@@ -20,3 +20,4 @@ Multitask GPQR without center-gap structure is not included in this example, as 
 
    gpqr.ipynb
    gpqr_cg.ipynb
+   mtgpqr_cg.ipynb
