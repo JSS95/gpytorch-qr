@@ -61,4 +61,6 @@ def test_gpqr():
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
+        gp.joint_quantile_posterior(x_pred)
         gp.marginal_quantile_posterior(x_pred)
+        gp.mean_quantiles(x_pred)
