@@ -19,7 +19,7 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        torch.distributions.Distribution
+        gpytorch.distributions.MultivariateNormal
         """
         pass
 
@@ -47,7 +47,7 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (Q, N)
+        quantiles : torch.Tensor with shape (Q, N) or (N, Q)
             The predicted quantiles at the input locations.
             *Q* is the number of quantiles and *N* is the number of data points.
         """
@@ -66,7 +66,7 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        torch.Tensor with shape (Q, N)
+        torch.Tensor with shape (Q, N) or (N, Q)
             The predicted quantiles at the input locations.
             *Q* is the number of quantiles and *N* is the number of data points.
         """
@@ -84,7 +84,7 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (q, Q, N)
+        quantiles : torch.Tensor with shape (q, Q, N) or (q, N, Q)
             The predicted quantiles at the input locations.
             *Q* is the number of quantiles and *N* is the number of data points.
         """
@@ -105,7 +105,7 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (q, Q, N)
+        quantiles : torch.Tensor with shape (q, Q, N) or (q, N, Q)
             The predicted quantiles at the input locations.
             *Q* is the number of quantiles and *N* is the number of data points.
         """

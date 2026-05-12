@@ -124,8 +124,43 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP):
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
+    def joint_quantile_posterior(self, x):
+        """Joint posterior over quantiles at input locations.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+
+        Returns
+        -------
+        distribution : gpytorch.distributions.MultitaskMultivariateNormal
+            Joint posterior over quantiles at input locations.
+            ``mean`` has shape (N, Q) and ``covariance_matrix`` has shape (N*Q, N*Q),
+            where *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        return self(x)
+
+    def marginal_quantile_posterior(self, x):
+        """Marginal posterior over quantiles.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+
+        Returns
+        -------
+        distribution : torch.distributions.Normal
+            Marginal posterior over quantiles at input locations.
+            ``loc`` has shape (N, Q) and ``scale`` has shape (N, Q),
+            where *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
+
     def mean_quantiles(self, x):
-        """Predict quantiles by posterior mean.
+        """Predict quantiles by analytical posterior mean.
 
         Parameters
         ----------
@@ -138,6 +173,67 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP):
             The predicted quantiles at the input locations.
         """
         return self(x).mean
+
+    def mean_quantiles_mc(self, x, num_samples=10):
+        """Predict quantiles by Monte Carlo mean of the quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the mean.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (N, Q)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
+        return samples.mean(dim=0)  # (N, Q)
+
+    def quantile_quantiles(self, x, q):
+        """Analytic quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, N, Q)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self.marginal_quantile_posterior(x)
+        return dist.icdf(q.reshape(-1, 1, 1))  # (q, N, Q)
+
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Monte Carlo quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the quantiles.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, N, Q)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
+        return samples.quantile(q, dim=0)  # (q, N, Q)
 
 
 class MultitaskALDLikelihood(gpytorch.likelihoods.Likelihood):

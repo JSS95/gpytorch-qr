@@ -70,4 +70,9 @@ def test_mtgpqr():
     gp.eval()
     x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
+        gp.joint_quantile_posterior(x_pred)
+        gp.marginal_quantile_posterior(x_pred)
         gp.mean_quantiles(x_pred)
+        gp.mean_quantiles_mc(x_pred, num_samples=1)
+        gp.quantile_quantiles(x_pred, torch.tensor([0.025, 0.975]))
+        gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)

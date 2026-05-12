@@ -128,10 +128,6 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
             Joint posterior over quantiles at input locations.
             ``loc`` has shape (Q, N) and ``covariance_matrix`` has shape (Q, N, N),
             where *Q* is the number of quantiles and *N* is the number of data points.
-
-        See Also
-        --------
-        marginal_quantile_posterior : Marginal posterior over quantiles.
         """
         return self(x)
 
@@ -149,10 +145,6 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
             Marginal posterior over quantiles at input locations.
             ``loc`` has shape (Q, N) and ``scale`` has shape (Q, N),
             where *Q* is the number of quantiles and *N* is the number of data points.
-
-        See Also
-        --------
-        joint_quantile_posterior : Joint posterior over quantiles.
         """
         dist = self(x)
         return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
