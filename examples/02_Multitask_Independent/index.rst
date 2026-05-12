@@ -13,5 +13,5 @@ Compare these examples with the corresponding batch independent GPQR examples in
 .. toctree::
    :maxdepth: 1
 
-   gpqr_cg.ipynb
+   mtgpqr.ipynb
    mtgpqr_cg.ipynb
