@@ -41,6 +41,8 @@ documentation = "https://gpytorch-qr.readthedocs.io"
 [project.optional-dependencies]
 test = [
     "pytest",
+    "pytest-doctestplus",
+    "matplotlib",
 ]
 doc = [
     "sphinx",
@@ -70,4 +72,4 @@ doctest_optionflags = [
     "IGNORE_EXCEPTION_DETAIL",
     "ELLIPSIS",
 ]
-addopts = "--ignore=doc --ignore=examples --doctest-modules --import-mode=importlib"
+addopts = "--ignore=doc --ignore=examples --doctest-plus --import-mode=importlib"
