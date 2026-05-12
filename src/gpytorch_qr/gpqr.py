@@ -270,13 +270,13 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=0)  # (N,)
 
-    def predictive_posterior(self, quantile_posterior):
+    def predictive_posterior(self, gp_posterior):
         """Predictive posterior distribution of function values.
 
         Parameters
         ----------
-        quantile_posterior : gpytorch.distributions.MultivariateNormal
-            The joint posterior over quantiles at input locations.
+        gp_posterior : gpytorch.distributions.MultivariateNormal
+            The joint posterior over latent GPs at input locations.
 
         Returns
         -------
@@ -294,6 +294,6 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
             ci_lower = pp_dist.quantile(0.025, dim=0)
             ci_upper = pp_dist.quantile(0.975, dim=0)
         """
-        ald = self(quantile_posterior)  # (S, Q, N)
+        ald = self(gp_posterior)  # (S, Q, N)
         u = torch.rand_like(ald.m)
         return ald.icdf(u)

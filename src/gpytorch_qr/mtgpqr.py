@@ -94,6 +94,7 @@ import gpytorch
 import torch
 
 from .ald import MultitaskALD
+from .base import BayesianQRMixin
 
 __all__ = [
     "MultitaskQuantileGP",
@@ -101,7 +102,7 @@ __all__ = [
 ]
 
 
-class MultitaskQuantileGP(gpytorch.models.ApproximateGP):
+class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
     """Multitask approximate GP for multiple quantiles.
 
     Parameters
