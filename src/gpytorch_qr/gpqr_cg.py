@@ -79,7 +79,7 @@
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        quantiles = gp.mean_quantiles(x_pred, central_q_index).detach()
+        quantiles = gp.mean_quantiles(x_pred, central_q_index)
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
@@ -142,31 +142,28 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         quantile_posterior : torch.distributions.TransformedDistribution
             Joint posterior over quantiles at input locations.
         """
-        dist = self(x)
-        loc = dist.loc.T
-        cov = dist.covariance_matrix.permute(1, 2, 0)
-        return transform_centergap_posterior(loc, cov, L)
+        return transform_centergap_posterior(self(x), L)
 
-    def mean_quantiles(self, x, num_lower_quantiles):
-        """Predict quantiles by posterior mean.
+    def mean_quantiles(self, x, L, num_samples=10):
+        """Predict quantiles by MC mean of the quantile posterior.
 
         Parameters
         ----------
         x : torch.Tensor with shape (N, D)
             The input locations.
-        num_lower_quantiles : int
+        L : int
             The number of lower quantiles in center-gap representation.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the mean.
 
         Returns
         -------
         quantiles : torch.Tensor with shape (Q, N)
             The predicted quantiles at the input locations.
         """
-        function_means = self(x).mean.T  # (N, Q)
-        median = function_means[..., :1]
-        lower_gaps = function_means[..., 1 : 1 + num_lower_quantiles]
-        upper_gaps = function_means[..., 1 + num_lower_quantiles :]
-        return centergap_to_quantiles(median, lower_gaps, upper_gaps).T
+        dist = self.joint_quantile_posterior(x, L)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
+        return samples.mean(dim=0)  # (Q, N)
 
 
 class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):

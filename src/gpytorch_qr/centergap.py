@@ -10,32 +10,35 @@ __all__ = [
 ]
 
 
-def centergap_to_quantiles(central, lower_gaps, upper_gaps):
+def centergap_to_quantiles(central, lower_gaps, upper_gaps, quantile_dim=-1):
     """Convert center-gap representation samples to quantiles.
 
     Parameters
     ----------
-    central : torch.Tensor with shape (..., 1)
+    central : torch.Tensor with shape (..., 1, ...)
         The central quantile values.
-    lower_gaps : torch.Tensor with shape (..., L)
+    lower_gaps : torch.Tensor with shape (..., L, ...)
         Pre-transformed lower gap values.
-    upper_gaps : torch.Tensor with shape (..., U)
+    upper_gaps : torch.Tensor with shape (..., U, ...)
         Pre-transformed upper gap values.
+    quantile_dim : int, default=-1
+        The dimension along which the quantiles are represented.
 
     Returns
     -------
-    quantiles : torch.Tensor with shape (..., Q)
-        The quantile values. (Q = L + U + 1)
+    quantiles : torch.Tensor with shape (..., Q, ...)
+        Quantile values. (Q = L + U + 1 at *quantile_dim*)
+        The quantiles are ordered from lowest to highest along the quantile dimension.
     """
     lower_gaps = F.softplus(lower_gaps)
-    lower_quantiles = central - lower_gaps.flip(dims=[-1]).cumsum(dim=-1).flip(
-        dims=[-1]
-    )
+    lower_quantiles = central - lower_gaps.flip(dims=[quantile_dim]).cumsum(
+        dim=quantile_dim
+    ).flip(dims=[quantile_dim])
 
     upper_gaps = F.softplus(upper_gaps)
-    upper_quantiles = central + upper_gaps.cumsum(dim=-1)
+    upper_quantiles = central + upper_gaps.cumsum(dim=quantile_dim)
 
-    ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=-1)
+    ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=quantile_dim)
     return ret
 
 
@@ -53,12 +56,13 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
 
     Notes
     -----
-    Input is the tensor of shape ``(..., Q)`` in center-gap representation.
-    The first component is the central quantile, followed by *L* lower pre-gaps and
-    *U* upper pre-gaps, i.e., ``Q = 1 + L + U``.
+    Shape of input tensor is either ``(Q, N)`` or ``(S, Q, N)``,
+    where *Q* is the number of quantiles, *N* is the number of data points,
+    and *S* is the number of samples.
 
-    The pre-gaps are transformed by softplus to get the actual gaps, which are then
-    cumulatively summed to the central quantile to get the quantiles.
+    The center-gap components along the quantile dimension is ordered as
+    a central quantile, *L* lower pre-gaps, and *U* upper pre-gaps
+    (``Q = 1 + L + U``).
     """
 
     domain = torch.distributions.constraints.real_vector
@@ -70,41 +74,41 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
         self.L = L
 
     def _call(self, x):
-        L = self.L
-        central = x[..., :1]
-        lower_gaps = x[..., 1 : 1 + L]
-        upper_gaps = x[..., 1 + L :]
-        return centergap_to_quantiles(central, lower_gaps, upper_gaps)
+        C = x[..., :1, :]
+        L = x[..., 1 : 1 + self.L, :]
+        U = x[..., 1 + self.L :, :]
+        Q = centergap_to_quantiles(C, L, U, quantile_dim=-2)
+        return Q  # (Q, N) or (S, Q, N)
 
     def _inverse(self, y):
         L = self.L
-        central = y[..., L : L + 1]
+        central = y[..., L : L + 1, :]
 
-        lower_with_central = y[..., : L + 1]
-        lower_gaps_linear = lower_with_central[..., 1:] - lower_with_central[..., :-1]
+        lower_gaps_linear = y[..., : L + 1, :].diff(dim=-2)
+        upper_gaps_linear = y[..., L:, :].diff(dim=-2)
 
-        upper_with_central = y[..., L:]
-        upper_gaps_linear = upper_with_central[..., 1:] - upper_with_central[..., :-1]
-
-        lower_gaps_pre = _softplus_inverse(lower_gaps_linear)
-        upper_gaps_pre = _softplus_inverse(upper_gaps_linear)
-
-        return torch.cat([central, lower_gaps_pre, upper_gaps_pre], dim=-1)
+        return torch.cat(
+            [
+                central,
+                _softplus_inverse(lower_gaps_linear),
+                _softplus_inverse(upper_gaps_linear),
+            ],
+            dim=-2,
+        )
 
     def log_abs_det_jacobian(self, x, y):
-        return F.logsigmoid(x[..., 1:]).sum(dim=-1)
+        return F.logsigmoid(x[..., 1:, :]).sum(dim=(-2, -1))
 
 
-def transform_centergap_posterior(loc, covar, L):
+def transform_centergap_posterior(posterior, L):
     """Convert the center-gap posterior to quantile posterior.
 
     Parameters
     ----------
-    loc : torch.Tensor with shape (N, Q)
-        The mean of the posterior distribution in center-gap representation.
-    covar : torch.Tensor with shape (N, N, Q)
-        The covariance matrix of the posterior distribution in
-        center-gap representation.
+    posterior : gpytorch.distributions.MultivariateNormal
+        The center-gap posterior distribution, with loc of shape ``(Q, N)``
+        and covariance matrix of shape ``(Q, N, N)`` where *Q* is the
+        number of quantiles and *N* is the number of data points.
     L : int
         The number of lower quantiles in center-gap representation.
 
@@ -113,13 +117,12 @@ def transform_centergap_posterior(loc, covar, L):
     quantile_posterior : torch.distributions.TransformedDistribution
         Posterior over quantiles, obtained by applying
         :class:`CenterGapToQuantileTransform` to a batched
-        :class:`torch.distributions.MultivariateNormal`.
+        :class:`gpytorch.distributions.MultivariateNormal`.
 
     Notes
     -----
     The quantile dimension consists of the central quantile,
     followed by *L* lower gaps and *U* upper gaps, where *U = Q - L - 1*.
     """
-    base_dist = torch.distributions.MultivariateNormal(loc, covariance_matrix=covar)
     transform = CenterGapToQuantileTransform(L)
-    return torch.distributions.TransformedDistribution(base_dist, transform)
+    return torch.distributions.TransformedDistribution(posterior, transform)

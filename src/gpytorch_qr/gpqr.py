@@ -123,7 +123,7 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
 
         Returns
         -------
-        distribution : torch.distributions.MultivariateNormal
+        distribution : gpytorch.distributions.MultivariateNormal
             Joint posterior over quantiles at input locations.
             ``loc`` has shape (Q, N) and ``covariance_matrix`` has shape (Q, N, N),
             where *Q* is the number of quantiles and *N* is the number of data points.
