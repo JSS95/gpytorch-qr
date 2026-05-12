@@ -71,7 +71,13 @@ to model the correlation structure.
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(variational_strategy, center_mean, gap_mean, covar_module)
+            super().__init__(
+                variational_strategy,
+                center_mean,
+                gap_mean,
+                covar_module,
+                num_lower_quantiles,
+            )
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = (q - 0.5).abs().argmin().item()
@@ -99,7 +105,7 @@ to model the correlation structure.
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        quantiles = gp.mean_quantiles(x_pred, central_q_index)
+        quantiles = gp.mean_quantiles(x_pred)
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
@@ -133,13 +139,23 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         The mean module for the gaps between quantiles.
     covar_module : gpytorch.kernels.Kernel
         The covariance module for the Gaussian process.
+    num_lower_quantiles : int
+        The number of lower quantiles in center-gap representation.
     """
 
-    def __init__(self, variational_strategy, center_mean, gap_mean, covar_module):
+    def __init__(
+        self,
+        variational_strategy,
+        center_mean,
+        gap_mean,
+        covar_module,
+        num_lower_quantiles,
+    ):
         super().__init__(variational_strategy)
         self.center_mean = center_mean
         self.gap_mean = gap_mean
         self.covar_module = covar_module
+        self.num_lower_quantiles = num_lower_quantiles
 
     def forward(self, x):
         center_mean = self.center_mean(x)
@@ -148,15 +164,13 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
-    def mean_quantiles(self, x, num_lower_quantiles):
+    def mean_quantiles(self, x):
         """Predict quantiles by posterior mean.
 
         Parameters
         ----------
         x : torch.Tensor with shape (N, D)
             The input locations.
-        num_lower_quantiles : int
-            The number of lower quantiles in center-gap representation.
 
         Returns
         -------
@@ -165,8 +179,8 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         """
         function_means = self(x).mean  # (N, Q)
         median = function_means[..., :1]
-        lower_gaps = function_means[..., 1 : 1 + num_lower_quantiles]
-        upper_gaps = function_means[..., 1 + num_lower_quantiles :]
+        lower_gaps = function_means[..., 1 : 1 + self.num_lower_quantiles]
+        upper_gaps = function_means[..., 1 + self.num_lower_quantiles :]
         return centergap_to_quantiles(median, lower_gaps, upper_gaps)
 
 

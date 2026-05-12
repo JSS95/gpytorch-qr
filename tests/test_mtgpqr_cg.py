@@ -56,7 +56,13 @@ def test_mtgpqr_cg():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(variational_strategy, center_mean, gap_mean, covar_module)
+            super().__init__(
+                variational_strategy,
+                center_mean,
+                gap_mean,
+                covar_module,
+                num_lower_quantiles,
+            )
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
@@ -82,4 +88,4 @@ def test_mtgpqr_cg():
     gp.eval()
     x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
-        gp.mean_quantiles(x_pred, central_q_index)
+        gp.mean_quantiles(x_pred)
