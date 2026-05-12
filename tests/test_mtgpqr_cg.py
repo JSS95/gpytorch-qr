@@ -80,6 +80,6 @@ def test_mtgpqr_cg():
         optimizer.zero_grad()
 
     gp.eval()
-    x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
+    x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
         gp.mean_quantiles(x_pred, central_q_index)

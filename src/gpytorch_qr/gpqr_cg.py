@@ -81,7 +81,7 @@
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        quantiles = gp.mean_quantiles(x_pred)
+        quantiles = gp.mean_quantiles_mc(x_pred)
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
@@ -93,6 +93,7 @@ import gpytorch
 import torch
 
 from .ald import BatchALD
+from .base import BayesianQRMixin
 from .centergap import centergap_to_quantiles, transform_centergap_posterior
 
 __all__ = [
@@ -101,7 +102,7 @@ __all__ = [
 ]
 
 
-class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP):
+class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
     """Batch approximate GP for multiple quantiles using center-gap representation.
 
     Parameters
@@ -154,7 +155,7 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         """
         return transform_centergap_posterior(self(x), self.num_lower_quantiles)
 
-    def mean_quantiles(self, x, num_samples=10):
+    def mean_quantiles_mc(self, x, num_samples=10):
         """Predict quantiles by MC mean of the quantile posterior.
 
         Parameters

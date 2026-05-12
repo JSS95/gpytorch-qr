@@ -59,8 +59,9 @@ def test_gpqr():
         optimizer.zero_grad()
 
     gp.eval()
-    x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
+    x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
         gp.joint_quantile_posterior(x_pred)
         gp.marginal_quantile_posterior(x_pred)
         gp.mean_quantiles(x_pred)
+        gp.mean_quantiles_mc(x_pred, num_samples=1)

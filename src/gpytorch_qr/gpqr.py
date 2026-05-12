@@ -83,6 +83,7 @@ import gpytorch
 import torch
 
 from .ald import BatchALD
+from .base import BayesianQRMixin
 
 __all__ = [
     "BatchQuantileGP",
@@ -90,7 +91,7 @@ __all__ = [
 ]
 
 
-class BatchQuantileGP(gpytorch.models.ApproximateGP):
+class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
     """Batch approximate GP for multiple quantiles.
 
     Parameters
@@ -157,7 +158,7 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
         return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
 
     def mean_quantiles(self, x):
-        """Predict quantiles by posterior mean.
+        """Predict quantiles by analytical posterior mean.
 
         Parameters
         ----------
@@ -171,6 +172,26 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
             *Q* is the number of quantiles and *N* is the number of data points.
         """
         return self(x).mean
+
+    def mean_quantiles_mc(self, x, num_samples=10):
+        """Predict quantiles by MC mean of the quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the mean.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
+        return samples.mean(dim=0)  # (Q, N)
 
 
 class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
