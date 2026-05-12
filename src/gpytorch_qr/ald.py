@@ -71,6 +71,26 @@ class BatchALD(torch.distributions.Distribution):
         )  # (S, Q, N)
         return logp
 
+    def icdf(self, value):
+        """Inverse CDF of the asymmetric Laplace distribution.
+
+        Parameters
+        ----------
+        value : torch.Tensor with shape (S, Q, N)
+            Probabilities at which to evaluate the inverse CDF. Must be in (0, 1).
+
+        Returns
+        -------
+        torch.Tensor with shape (S, Q, N)
+            The corresponding quantiles of the distribution.
+        """
+        return torch.where(
+            value <= self.kappa,
+            self.m + self.lamda / (1 - self.kappa) * torch.log(value / self.kappa),
+            self.m
+            - self.lamda / self.kappa * torch.log((1 - value) / (1 - self.kappa)),
+        )
+
 
 class MultitaskALD(torch.distributions.Distribution):
     """Asymmetric Laplace distribution for multitask quantile regression.
@@ -128,3 +148,23 @@ class MultitaskALD(torch.distributions.Distribution):
             torch.log(self.kappa * (1 - self.kappa) / self.lamda) - rho / self.lamda
         )  # (S, N, Q)
         return logp
+
+    def icdf(self, value):
+        """Inverse CDF of the asymmetric Laplace distribution.
+
+        Parameters
+        ----------
+        value : torch.Tensor with shape (S, N, Q)
+            Probabilities at which to evaluate the inverse CDF. Must be in (0, 1).
+
+        Returns
+        -------
+        torch.Tensor with shape (S, N, Q)
+            The corresponding quantiles of the distribution.
+        """
+        return torch.where(
+            value <= self.kappa,
+            self.m + self.lamda / (1 - self.kappa) * torch.log(value / self.kappa),
+            self.m
+            - self.lamda / self.kappa * torch.log((1 - value) / (1 - self.kappa)),
+        )

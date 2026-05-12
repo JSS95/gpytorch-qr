@@ -1,6 +1,12 @@
 Utilities
 =========
 
+Base class
+----------
+
+.. automodule:: gpytorch_qr.base
+    :members:
+
 Asymmetric laplace distribution
 --------------------------------
 
