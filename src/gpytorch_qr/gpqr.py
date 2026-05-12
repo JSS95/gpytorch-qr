@@ -253,4 +253,4 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
         # lp: (Q, N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=0)  # (N,)
+        return lp.sum(dim=-2)  # (N,)
