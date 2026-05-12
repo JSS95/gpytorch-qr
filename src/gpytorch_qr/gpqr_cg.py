@@ -232,16 +232,14 @@ class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihood
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *L* is the number of lower
             quantiles, *U* is the number of upper quantiles, and *N* is the number of
-            data points,
-            The first dimension in the second axis corresponds to the central quantile,
-            followed by lower quantiles and then upper quantiles.
+            data points.
         """
-        function_samples = function_samples.permute(0, 2, 1)  # (S, N, Q)
-        center = function_samples[:, :, :1]
-        lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
-        upper_gaps = function_samples[:, :, 1 + self.lower_count :]
-        quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
-        quantiles = quantiles.permute(0, 2, 1)  # (S, Q, N)
+        center = function_samples[:, :1, :]
+        lower_gaps = function_samples[:, 1 : 1 + self.lower_count, :]
+        upper_gaps = function_samples[:, 1 + self.lower_count :, :]
+        quantiles = centergap_to_quantiles(
+            center, lower_gaps, upper_gaps, quantile_dim=-2
+        )
         return BatchALD(
             m=quantiles,  # (S, Q, N)
             lamda=self.scales,  # (Q,)

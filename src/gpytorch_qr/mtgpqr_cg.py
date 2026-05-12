@@ -118,6 +118,7 @@ import gpytorch
 import torch
 
 from .ald import MultitaskALD
+from .base import ALDLikelihoodMixin, BayesianQRMixin
 from .centergap import centergap_to_quantiles, transform_centergap_posterior
 
 __all__ = [
@@ -127,7 +128,7 @@ __all__ = [
 ]
 
 
-class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
+class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
     """Multitask approximate GP for multiple quantiles using center-gap representation.
 
     Parameters
@@ -199,8 +200,32 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
         return samples.mean(dim=0)  # (N, Q)
 
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Monte Carlo quantile of quantile posterior.
 
-class MultitaskCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the quantiles.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, N, Q)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self.joint_quantile_posterior(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
+        return samples.quantile(q, dim=0)  # (q, N, Q)
+
+
+class MultitaskCenterGapALDLikelihood(
+    gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin
+):
     """ALD likelihood for multitask quantile regression with center-gap representation.
 
     Parameters
