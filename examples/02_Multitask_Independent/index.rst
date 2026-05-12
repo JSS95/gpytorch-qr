@@ -9,3 +9,9 @@ This leads to results equivalent to those from batch independent GPQR (:mod:`gpy
 
 This section contains two examples of multitask independent GPQR: one by direct quantiles and the other by center-gap representation.
 Compare these examples with the corresponding batch independent GPQR examples in :ref:`basic-usage`.
+
+.. toctree::
+   :maxdepth: 1
+
+   gpqr_cg.ipynb
+   mtgpqr_cg.ipynb
