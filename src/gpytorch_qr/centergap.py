@@ -102,7 +102,7 @@ def transform_centergap_posterior(loc, covar, L):
     ----------
     loc : torch.Tensor with shape (N, Q)
         The mean of the posterior distribution in center-gap representation.
-    covar : torch.Tensor with shape (N, Q, Q)
+    covar : torch.Tensor with shape (N, N, Q)
         The covariance matrix of the posterior distribution in
         center-gap representation.
     L : int

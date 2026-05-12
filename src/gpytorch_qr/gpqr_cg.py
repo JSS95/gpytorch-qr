@@ -91,7 +91,7 @@ import gpytorch
 import torch
 
 from .ald import BatchALD
-from .centergap import centergap_to_quantiles
+from .centergap import centergap_to_quantiles, transform_centergap_posterior
 
 __all__ = [
     "BatchCenterGapQuantileGP",
@@ -126,6 +126,26 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP):
         mean = torch.concat([center_mean.unsqueeze(0), gap_mean], dim=0)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
+
+    def joint_quantile_posterior(self, x, L):
+        """Joint posterior over quantiles at input locations.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        L : int
+            The number of lower quantiles in center-gap representation.
+
+        Returns
+        -------
+        quantile_posterior : torch.distributions.TransformedDistribution
+            Joint posterior over quantiles at input locations.
+        """
+        dist = self(x)
+        loc = dist.loc.T
+        cov = dist.covariance_matrix.permute(1, 2, 0)
+        return transform_centergap_posterior(loc, cov, L)
 
     def mean_quantiles(self, x, num_lower_quantiles):
         """Predict quantiles by posterior mean.
