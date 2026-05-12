@@ -71,7 +71,7 @@
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        q_posterior = gp.marginal_posterior(x_pred)
+        q_posterior = gp.marginal_quantile_posterior(x_pred)
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
@@ -113,7 +113,28 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
-    def marginal_posterior(self, x):
+    def joint_quantile_posterior(self, x):
+        """Joint posterior over quantiles at input locations.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+
+        Returns
+        -------
+        distribution : torch.distributions.MultivariateNormal
+            Joint posterior over quantiles at input locations.
+            ``loc`` has shape (Q, N) and ``covariance_matrix`` has shape (Q, N, N),
+            where *Q* is the number of quantiles and *N* is the number of data points.
+
+        See Also
+        --------
+        marginal_quantile_posterior : Marginal posterior over quantiles.
+        """
+        return self(x)
+
+    def marginal_quantile_posterior(self, x):
         """Marginal posterior over quantiles.
 
         Parameters
@@ -128,9 +149,9 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
             ``loc`` has shape (Q, N) and ``scale`` has shape (Q, N),
             where *Q* is the number of quantiles and *N* is the number of data points.
 
-        Notes
-        -----
-        To obtain the full joint posterior over quantiles, use ``self(x)``.
+        See Also
+        --------
+        joint_quantile_posterior : Joint posterior over quantiles.
         """
         dist = self(x)
         return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
