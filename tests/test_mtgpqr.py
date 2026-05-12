@@ -76,3 +76,4 @@ def test_mtgpqr():
         gp.mean_quantiles_mc(x_pred, num_samples=1)
         gp.quantile_quantiles(x_pred, torch.tensor([0.025, 0.975]))
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
+        likelihood.predictive_posterior(gp(x_pred))
