@@ -71,3 +71,42 @@ class BayesianQRMixin(abc.ABC):
             *Q* is the number of quantiles and *N* is the number of data points.
         """
         pass
+
+    def quantile_quantiles(self, x, q):
+        """Analytic quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Monte Carlo quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the quantiles.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        pass

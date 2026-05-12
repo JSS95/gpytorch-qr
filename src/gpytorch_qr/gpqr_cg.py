@@ -174,6 +174,28 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
         return samples.mean(dim=0)  # (Q, N)
 
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Monte Carlo quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the quantiles.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self.joint_quantile_posterior(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
+        return samples.quantile(q, dim=0)  # (q, Q, N)
+
 
 class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
     """ALD likelihood for batch quantile regression with center-gap representation.

@@ -174,7 +174,7 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return self(x).mean
 
     def mean_quantiles_mc(self, x, num_samples=10):
-        """Predict quantiles by MC mean of the quantile posterior.
+        """Predict quantiles by Monte Carlo mean of the quantile posterior.
 
         Parameters
         ----------
@@ -192,6 +192,47 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         dist = self(x)
         samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
         return samples.mean(dim=0)  # (Q, N)
+
+    def quantile_quantiles(self, x, q):
+        """Analytic quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self.marginal_quantile_posterior(x)
+        return dist.icdf(q.reshape(-1, 1, 1))  # (q, Q, N)
+
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Monte Carlo quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the quantiles.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
+        return samples.quantile(q, dim=0)  # (q, Q, N)
 
 
 class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
