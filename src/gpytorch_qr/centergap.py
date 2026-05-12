@@ -1,5 +1,6 @@
 """Center-gap representation."""
 
+import gpytorch
 import torch
 import torch.nn.functional as F
 
@@ -53,11 +54,16 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
     ----------
     L : int
         Number of lower quantile gaps in the center-gap representation.
+    quantile_dim : {-1, -2}
+        The dimension along which the quantiles are represented.
 
     Notes
     -----
-    Shape of input tensor is either ``(Q, N)`` or ``(S, Q, N)``,
-    where *Q* is the number of quantiles, *N* is the number of data points,
+    If *quantile_dim* is -1, shape of input tensor is either
+    ``(N, Q)`` or ``(S, N, Q)``.
+    If *quantile_dim* is -2, shape of input tensor is either
+    ``(Q, N)`` or ``(S, Q, N)``.
+    Here, *Q* is the number of quantiles, *N* is the number of data points,
     and *S* is the number of samples.
 
     The center-gap components along the quantile dimension is ordered as
@@ -69,35 +75,38 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
     codomain = torch.distributions.constraints.real_vector
     bijective = True
 
-    def __init__(self, L):
+    def __init__(self, L, quantile_dim=-2):
         super().__init__()
         self.L = L
+        self.quantile_dim = quantile_dim
 
     def _call(self, x):
-        C = x[..., :1, :]
-        L = x[..., 1 : 1 + self.L, :]
-        U = x[..., 1 + self.L :, :]
-        Q = centergap_to_quantiles(C, L, U, quantile_dim=-2)
-        return Q  # (Q, N) or (S, Q, N)
+        qdim = self.quantile_dim
+        C = torch.narrow(x, qdim, 0, 1)
+        L = torch.narrow(x, qdim, 1, self.L)
+        U = torch.narrow(x, qdim, 1 + self.L, x.shape[qdim] - 1 - self.L)
+        Q = centergap_to_quantiles(C, L, U, quantile_dim=qdim)
+        return Q
 
     def _inverse(self, y):
         L = self.L
-        central = y[..., L : L + 1, :]
-
-        lower_gaps_linear = y[..., : L + 1, :].diff(dim=-2)
-        upper_gaps_linear = y[..., L:, :].diff(dim=-2)
-
+        qdim = self.quantile_dim
+        central = torch.narrow(y, qdim, L, 1)
+        lower_gaps_linear = torch.narrow(y, qdim, 0, L + 1).diff(dim=qdim)
+        upper_gaps_linear = torch.narrow(y, qdim, L, y.shape[qdim] - L).diff(dim=qdim)
         return torch.cat(
             [
                 central,
                 _softplus_inverse(lower_gaps_linear),
                 _softplus_inverse(upper_gaps_linear),
             ],
-            dim=-2,
+            dim=qdim,
         )
 
     def log_abs_det_jacobian(self, x, y):
-        return F.logsigmoid(x[..., 1:, :]).sum(dim=(-2, -1))
+        qdim = self.quantile_dim
+        gaps = torch.narrow(x, qdim, 1, x.shape[qdim] - 1)
+        return F.logsigmoid(gaps).sum(dim=(-2, -1))
 
 
 def transform_centergap_posterior(posterior, L):
@@ -106,9 +115,7 @@ def transform_centergap_posterior(posterior, L):
     Parameters
     ----------
     posterior : gpytorch.distributions.MultivariateNormal
-        The center-gap posterior distribution, with loc of shape ``(Q, N)``
-        and covariance matrix of shape ``(Q, N, N)`` where *Q* is the
-        number of quantiles and *N* is the number of data points.
+        The center-gap posterior distribution.
     L : int
         The number of lower quantiles in center-gap representation.
 
@@ -124,5 +131,11 @@ def transform_centergap_posterior(posterior, L):
     The quantile dimension consists of the central quantile,
     followed by *L* lower gaps and *U* upper gaps, where *U = Q - L - 1*.
     """
-    transform = CenterGapToQuantileTransform(L)
+    if isinstance(posterior, gpytorch.distributions.MultitaskMultivariateNormal):
+        quantile_dim = -1
+    elif isinstance(posterior, gpytorch.distributions.MultivariateNormal):
+        quantile_dim = -2
+    else:
+        raise ValueError("Posterior is not a multivariate normal.")
+    transform = CenterGapToQuantileTransform(L, quantile_dim=quantile_dim)
     return torch.distributions.TransformedDistribution(posterior, transform)
