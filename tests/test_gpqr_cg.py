@@ -23,7 +23,7 @@ def test_gpqr_cg():
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
     class MyGP(BatchCenterGapQuantileGP):
-        def __init__(self, inducing_points, num_quantiles):
+        def __init__(self, inducing_points, num_quantiles, num_lower_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
                 N,
@@ -42,11 +42,13 @@ def test_gpqr_cg():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
                 batch_shape=torch.Size([num_quantiles]),
             )
-            super().__init__(variational_strategy, center_mean, gap_mean, covar)
+            super().__init__(
+                variational_strategy, center_mean, gap_mean, covar, num_lower_quantiles
+            )
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
-    gp = MyGP(inducing_points, len(q))
+    gp = MyGP(inducing_points, len(q), central_q_index)
     likelihood = BatchCenterGapALDLikelihood(q, central_q_index)
 
     gp.train()
@@ -65,6 +67,9 @@ def test_gpqr_cg():
         optimizer.zero_grad()
 
     gp.eval()
-    x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
+    x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
-        gp.mean_quantiles(x_pred, central_q_index).detach()
+        gp.joint_quantile_posterior(x_pred)
+        gp.mean_quantiles_mc(x_pred, num_samples=1)
+        gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
+        likelihood.predictive_posterior(gp(x_pred))

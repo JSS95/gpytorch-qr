@@ -71,18 +71,19 @@
     gp.eval()
     x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     with torch.no_grad():
-        quantiles = gp.mean_quantiles(x_pred).detach()
+        mean_q = gp.mean_quantiles(x_pred)
 
     import matplotlib.pyplot as plt
     plt.scatter(x, y, c='gray', marker='.', alpha=0.1)
     plt.plot(x_range, true_quantiles, '--', c='k')
-    plt.plot(x_pred, quantiles.T)
+    plt.plot(x_pred, mean_q.T)
 """
 
 import gpytorch
 import torch
 
 from .ald import BatchALD
+from .base import ALDLikelihoodMixin, BayesianQRMixin
 
 __all__ = [
     "BatchQuantileGP",
@@ -90,7 +91,7 @@ __all__ = [
 ]
 
 
-class BatchQuantileGP(gpytorch.models.ApproximateGP):
+class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
     """Batch approximate GP for multiple quantiles.
 
     Parameters
@@ -113,8 +114,43 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
+    def joint_quantile_posterior(self, x):
+        """Joint posterior over quantiles at input locations.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+
+        Returns
+        -------
+        distribution : gpytorch.distributions.MultivariateNormal
+            Joint posterior over quantiles at input locations.
+            ``loc`` has shape (Q, N) and ``covariance_matrix`` has shape (Q, N, N),
+            where *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        return self(x)
+
+    def marginal_quantile_posterior(self, x):
+        """Marginal posterior over quantiles.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+
+        Returns
+        -------
+        distribution : torch.distributions.Normal
+            Marginal posterior over quantiles at input locations.
+            ``loc`` has shape (Q, N) and ``scale`` has shape (Q, N),
+            where *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
+
     def mean_quantiles(self, x):
-        """Predict quantiles by posterior mean.
+        """Predict quantiles by analytical posterior mean.
 
         Parameters
         ----------
@@ -125,11 +161,73 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP):
         -------
         quantiles : torch.Tensor with shape (Q, N)
             The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
         """
         return self(x).mean
 
+    def mean_quantiles_mc(self, x, num_samples=10):
+        """Predict quantiles by Monte Carlo mean of the quantile posterior.
 
-class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the mean.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
+        return samples.mean(dim=0)  # (Q, N)
+
+    def quantile_quantiles(self, x, q):
+        """Analytic quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self.marginal_quantile_posterior(x)
+        return dist.icdf(q.reshape(-1, 1, 1))  # (q, Q, N)
+
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Monte Carlo quantile of quantile posterior.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape (N, D)
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            Number of MC samples used to estimate the quantiles.
+
+        Returns
+        -------
+        quantiles : torch.Tensor with shape (q, Q, N)
+            The predicted quantiles at the input locations.
+            *Q* is the number of quantiles and *N* is the number of data points.
+        """
+        dist = self(x)
+        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
+        return samples.quantile(q, dim=0)  # (q, Q, N)
+
+
+class BatchALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
     """ALD likelihood for batch quantile regression.
 
     Parameters
@@ -157,8 +255,8 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood):
         Parameters
         ----------
         function_samples : torch.Tensor with shape (S, Q, N)
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            The function samples drawn from the posterior of quantile functions.
+            *S* is the number of samples, *Q* is the number of quantiles,
             and *N* is the number of data points.
         """
         return BatchALD(
