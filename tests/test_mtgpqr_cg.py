@@ -88,4 +88,5 @@ def test_mtgpqr_cg():
     gp.eval()
     x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
-        gp.mean_quantiles(x_pred)
+        gp.joint_quantile_posterior(x_pred)
+        gp.mean_quantiles_mc(x_pred, num_samples=1)
