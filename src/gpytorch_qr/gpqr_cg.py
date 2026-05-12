@@ -93,7 +93,7 @@ import gpytorch
 import torch
 
 from .ald import BatchALD
-from .base import BayesianQRMixin
+from .base import ALDLikelihoodMixin, BayesianQRMixin
 from .centergap import centergap_to_quantiles, transform_centergap_posterior
 
 __all__ = [
@@ -197,7 +197,7 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return samples.quantile(q, dim=0)  # (q, Q, N)
 
 
-class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
+class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
     """ALD likelihood for batch quantile regression with center-gap representation.
 
     Parameters
@@ -252,31 +252,3 @@ class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood):
         # lp: (Q, N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=0)  # (N,)
-
-    def predictive_posterior(self, gp_posterior):
-        """Predictive posterior distribution of function values.
-
-        Parameters
-        ----------
-        gp_posterior : gpytorch.distributions.MultivariateNormal
-            The joint posterior over latent GPs at input locations.
-
-        Returns
-        -------
-        samples : torch.Tensor with shape (S, Q, N)
-            Samples drawn from the predictive posterior distribution of function values.
-
-        Examples
-        --------
-        Get 95% predictive intervals:
-
-        .. code-block:: python
-
-            with torch.no_grad(), gpytorch.settings.num_likelihood_samples(1000):
-                pp_dist = gp(x_pred)
-            ci_lower = pp_dist.quantile(0.025, dim=0)
-            ci_upper = pp_dist.quantile(0.975, dim=0)
-        """
-        ald = self(gp_posterior)  # (S, Q, N)
-        u = torch.rand_like(ald.m)
-        return ald.icdf(u)

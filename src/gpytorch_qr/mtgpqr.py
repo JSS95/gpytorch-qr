@@ -94,7 +94,7 @@ import gpytorch
 import torch
 
 from .ald import MultitaskALD
-from .base import BayesianQRMixin
+from .base import ALDLikelihoodMixin, BayesianQRMixin
 
 __all__ = [
     "MultitaskQuantileGP",
@@ -237,7 +237,7 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return samples.quantile(q, dim=0)  # (q, N, Q)
 
 
-class MultitaskALDLikelihood(gpytorch.likelihoods.Likelihood):
+class MultitaskALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
     """ALD likelihood for multitask quantile regression.
 
     Parameters
@@ -280,31 +280,3 @@ class MultitaskALDLikelihood(gpytorch.likelihoods.Likelihood):
             observations, function_dist, *args, **kwargs
         )  # (N, Q)
         return lp.sum(dim=1)  # (N,)
-
-    def predictive_posterior(self, gp_posterior):
-        """Predictive posterior distribution of function values.
-
-        Parameters
-        ----------
-        gp_posterior : gpytorch.distributions.MultivariateNormal
-            The joint posterior over latent GPs at input locations.
-
-        Returns
-        -------
-        samples : torch.Tensor with shape (S, N, Q)
-            Samples drawn from the predictive posterior distribution of function values.
-
-        Examples
-        --------
-        Get 95% predictive intervals:
-
-        .. code-block:: python
-
-            with torch.no_grad(), gpytorch.settings.num_likelihood_samples(1000):
-                pp_dist = gp(x_pred)
-            ci_lower = pp_dist.quantile(0.025, dim=0)
-            ci_upper = pp_dist.quantile(0.975, dim=0)
-        """
-        ald = self(gp_posterior)  # (S, N, Q)
-        u = torch.rand_like(ald.m)
-        return ald.icdf(u)
