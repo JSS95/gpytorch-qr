@@ -50,6 +50,7 @@ doc = [
     "pydata_sphinx_theme",
     "matplotlib",
     "myst-nb",
+    "scikit-learn",
 ]
 dev = [
     "flake8",
