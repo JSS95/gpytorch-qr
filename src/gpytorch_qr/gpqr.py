@@ -7,8 +7,8 @@
 ...     return torch.cos(x * 2 * 3.14)
 >>> def std(x):
 ...     return x + 0.1
->>> x_range = torch.linspace(0, 1, 100).reshape(-1, 1)
->>> x = x_range.repeat(5, 1)
+>>> x_range = torch.linspace(0, 1, 10).reshape(-1, 1)
+>>> x = x_range.repeat(2, 1)
 >>> y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
 >>> q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 >>> true_quantiles = mean(x_range) + std(x_range) * Normal(0, 1).icdf(q)
