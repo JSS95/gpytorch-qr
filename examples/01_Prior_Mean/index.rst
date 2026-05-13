@@ -13,7 +13,9 @@ This process is modeled by prior mean functions where
 1. Quantiles have sinusoidal means with different offsets.
 2. All input points are used as inducing points, with unwhitened variational inference.
 
-Prediction with informative prior mean is compared to the one with the default (constant) prior mean.
+To show how informative bias by prior mean enhances the performance under data-deficient regimes, a relatively small number of sample data are used.
+Compare the following four notebooks to see its effect on different architectures.
+It can be observed that independent GPQR easily overfits and numerically susceptible, while multi-task correlation stabilizes the model.
 
 .. toctree::
    :maxdepth: 1

@@ -80,7 +80,7 @@ to model the correlation structure.
 ...     list(gp.parameters()) + list(likelihood.parameters()),
 ...     lr=0.001,
 ... )
->>> N = 1  # Set to 1 for faster training; increase for better performance (~1000)
+>>> N = 1  # Set to 1 for faster training; increase for better performance
 >>> for _ in range(N):
 ...     output = gp(x)
 ...     loss = -mll(output, y)
