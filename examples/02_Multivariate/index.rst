@@ -13,5 +13,4 @@ Multivariate GPQR
    :caption: Advanced examples
 
    scaling.ipynb
-
-TODO - add kernel lengthscale constraint example
+   constraint.ipynb
