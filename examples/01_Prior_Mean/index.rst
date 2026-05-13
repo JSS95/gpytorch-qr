@@ -15,7 +15,8 @@ This process is modeled by prior mean functions where
 
 To show how informative bias by prior mean enhances the performance under data-deficient regimes, a relatively small number of sample data are used.
 Compare the following four notebooks to see its effect on different architectures.
-It can be observed that independent GPQR easily overfits and numerically susceptible, while multi-task correlation stabilizes the model.
+It can be observed that independent GPQR is numerically unstable, and direct regression without center-gap representation leads to collapse of quantiles.
+Only the multitask correlated center-gap GPQR shows robust performance.
 
 .. toctree::
    :maxdepth: 1
