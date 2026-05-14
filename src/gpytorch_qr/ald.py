@@ -241,6 +241,10 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
             self.register_buffer("raw_scales", raw_scales)
         self.register_constraint("raw_scales", gpytorch.constraints.Positive())
 
+    @property
+    def scales(self):
+        return self.raw_scales_constraint.transform(self.raw_scales)
+
     def predictive_posterior(self, gp_posterior):
         """Predictive posterior distribution of function values.
 

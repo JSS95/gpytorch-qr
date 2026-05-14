@@ -211,26 +211,17 @@ class MultitaskCenterGapALDLikelihood(ALDLikelihood):
 
     Parameters
     ----------
-    q : torch.Tensor with shape (Q,)
-        The quantile levels.
+    q
     central_quantile_index : int
         The index of the central quantile in the quantile levels.
-    raw_scales : torch.Tensor with shape (Q, [batch_shape]) or scalar, default=0
-        The initial untransformed scales of the asymmetric Laplace distribution.
-        The actual scales are obtained by applying the positive transformation.
-        Scalar value is broadcasted to the shape of *q*.
-    learn_scales : bool, default=True
-        Whether to update scales by gradients.
+    raw_scales
+    learn_scales
     """
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
         super().__init__(q, raw_scales, learn_scales)
         central_quantile = self.q[central_quantile_index]
         self.lower_count = (self.q < central_quantile).count_nonzero()
-
-    @property
-    def scales(self):
-        return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.

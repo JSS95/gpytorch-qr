@@ -224,10 +224,6 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
 class MultitaskALDLikelihood(ALDLikelihood):
     """Likelihood for :class:`MultitaskALD` with direct quantile representation."""
 
-    @property
-    def scales(self):
-        return self.raw_scales_constraint.transform(self.raw_scales)
-
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
 

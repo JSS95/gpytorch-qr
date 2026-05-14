@@ -125,60 +125,17 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
     def joint_quantile_posterior(self, x):
-        """Joint posterior over quantiles at input locations.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        quantile_posterior : torch.distributions.TransformedDistribution
-            Joint posterior over quantiles at input locations.
-        """
         return transform_centergap_posterior(self(x), self.num_lower_quantiles)
 
     def mean_quantiles_mc(self, x, num_samples=10):
-        """Predict quantiles by MC mean of the quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the mean.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (Q, N)
-            The predicted quantiles at the input locations.
-        """
         dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
-        return samples.mean(dim=0)  # (Q, N)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.mean(dim=0)
 
     def quantile_quantiles_mc(self, x, q, num_samples=10):
-        """Monte Carlo quantile of quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        q : torch.Tensor with shape (q,)
-            The quantile levels.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the quantiles.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (q, Q, N)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
-        return samples.quantile(q, dim=0)  # (q, Q, N)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.quantile(q, dim=0)
 
 
 class BatchCenterGapALDLikelihood(ALDLikelihood):
@@ -186,16 +143,11 @@ class BatchCenterGapALDLikelihood(ALDLikelihood):
 
     Parameters
     ----------
-    q : torch.Tensor with shape (Q,)
-        The quantile levels.
+    q
     central_quantile_index : int
         The index of the central quantile in the quantile levels.
-    raw_scales : torch.Tensor with shape (Q, [batch_shape]) or scalar, default=0
-        The initial untransformed scales of the asymmetric Laplace distribution.
-        The actual scales are obtained by applying the positive transformation.
-        Scalar value is broadcasted to the shape of *q*.
-    learn_scales : bool, default=True
-        Whether to update scales by gradients.
+    raw_scales
+    learn_scales
     """
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
@@ -203,34 +155,29 @@ class BatchCenterGapALDLikelihood(ALDLikelihood):
         central_quantile = self.q[central_quantile_index]
         self.lower_count = (self.q < central_quantile).count_nonzero()
 
-    @property
-    def scales(self):
-        return self.raw_scales_constraint.transform(self.raw_scales)
-
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, 1 + L + U, N)
+        function_samples : torch.Tensor with shape (S, 1 + L + U, [batch_shape], N)
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *L* is the number of lower
             quantiles, *U* is the number of upper quantiles, and *N* is the number of
             data points.
         """
-        center = function_samples[:, :1, :]
-        lower_gaps = function_samples[:, 1 : 1 + self.lower_count, :]
-        upper_gaps = function_samples[:, 1 + self.lower_count :, :]
+        center = function_samples[:, :1, ...]
+        lower_gaps = function_samples[:, 1 : 1 + self.lower_count, ...]
+        upper_gaps = function_samples[:, 1 + self.lower_count :, ...]
         quantiles = centergap_to_quantiles(
-            center, lower_gaps, upper_gaps, quantile_dim=-2
+            center, lower_gaps, upper_gaps, quantile_dim=1
         )
         return BatchALD(
-            m=quantiles,  # (S, Q, N)
-            lamda=self.scales,  # (Q,)
-            kappa=self.q,  # (Q,)
+            m=quantiles,
+            lamda=self.scales,
+            kappa=self.q,
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        # lp: (Q, N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=0)  # (N,)
+        return lp.sum(dim=0)

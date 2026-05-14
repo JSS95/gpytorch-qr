@@ -128,11 +128,16 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
 class BatchALDLikelihood(ALDLikelihood):
     """Likelihood for :class:`BatchALD` with direct quantile representation."""
 
-    @property
-    def scales(self):
-        return self.raw_scales_constraint.transform(self.raw_scales)
-
     def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape (S, Q, [batch_shape], N)
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            and *N* is the number of data points.
+        """
         return BatchALD(
             m=function_samples,
             lamda=self.scales,
