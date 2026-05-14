@@ -24,8 +24,7 @@ class BatchALD(torch.distributions.Distribution):
 
     Notes
     -----
-    ``batch_shape`` is for optional additional batches,
-    e.g., cross validation folds.
+    ``batch_shape`` is for optional additional batches, e.g., cross validation folds.
     """
 
     arg_constraints = {
@@ -91,20 +90,17 @@ class MultitaskALD(torch.distributions.Distribution):
 
     Parameters
     ----------
-    m : torch.Tensor with shape (S, N, Q)
+    m : torch.Tensor with shape (S, [batch_shape], N, Q)
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape (Q,)
+    lamda : torch.Tensor with shape ([batch_shape], Q,)
         The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape (Q,)
+    kappa : torch.Tensor with shape ([batch_shape], Q,)
         The quantile levels of the distribution.
 
     Notes
     -----
-    In the context of multitask quantile regression, the location parameter *m*
-    corresponds to sample points drawn from posterior distributions of latent GPs.
-    For *Q* quantiles, *S* samples are drawn for *N* data points.
-
-    The value passed to :meth:`log_prob` is the observed *y* values.
+    ``batch_shape`` is for optional additional batches, e.g., cross validation folds.
+    Latent GP dimension is not included in ``batch_shape``.
     """
 
     arg_constraints = {
@@ -116,10 +112,9 @@ class MultitaskALD(torch.distributions.Distribution):
     has_rsample = False
 
     def __init__(self, m, lamda, kappa):
-        # Reshape lamda and kappa as (1, 1, Q)
         self.m = m
-        self.lamda = lamda.view(1, 1, -1)
-        self.kappa = kappa.view(1, 1, -1)
+        self.lamda = lamda.reshape(1, *lamda.shape[:-1], 1, lamda.shape[-1])
+        self.kappa = kappa.reshape(1, *kappa.shape[:-1], 1, kappa.shape[-1])
         super().__init__(m.size())
 
     def log_prob(self, value):
@@ -127,20 +122,22 @@ class MultitaskALD(torch.distributions.Distribution):
 
         Parameters
         ----------
-        value : torch.Tensor with shape (N,)
-            The values at which to evaluate the log probability.
+        value : torch.Tensor with shape ([batch_shape], N)
+            Observed response variables at which to evaluate the log probability.
 
         Returns
         -------
-        logp : torch.Tensor with shape (S, N, Q)
-            The log probability at the given values for each quantile.
+        logp : torch.Tensor with shape (S, [batch_shape], N, Q)
+            The log probability at the given values for each quantile and sample.
         """
-        # value: (N,), m: (S, N, Q), lamda & kappa: (1, 1, Q)
-        diff = value.view(1, -1, 1) - self.m  # (S, N, Q)
-        rho = diff * (self.kappa - (diff < 0).float())  # (S, N, Q)
+        residual = value.reshape(1, *value.shape, 1) - self.m
+        check = residual * (self.kappa - (residual < 0).to(residual))
         logp = (
-            torch.log(self.kappa * (1 - self.kappa) / self.lamda) - rho / self.lamda
-        )  # (S, N, Q)
+            torch.log(self.kappa)
+            + torch.log(1 - self.kappa)
+            - torch.log(self.lamda)
+            - check / self.lamda
+        )
         return logp
 
     def icdf(self, value):
@@ -148,12 +145,12 @@ class MultitaskALD(torch.distributions.Distribution):
 
         Parameters
         ----------
-        value : torch.Tensor with shape (S, N, Q)
+        value : torch.Tensor with shape (S, [batch_shape], N, Q)
             Probabilities at which to evaluate the inverse CDF. Must be in (0, 1).
 
         Returns
         -------
-        torch.Tensor with shape (S, N, Q)
+        torch.Tensor with shape (S, [batch_shape], N, Q)
             The corresponding quantiles of the distribution.
         """
         return torch.where(
@@ -169,12 +166,16 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
     Parameters
     ----------
-    q : torch.Tensor with shape (Q, [batch_shape])
+    q : torch.Tensor
         The quantile levels.
-    raw_scales : torch.Tensor with shape (Q, [batch_shape]) or scalar, default=0
+        Shape is ``(Q, [batch_shape])`` for batch GPQR
+        and ``([batch_shape], Q)`` for multitask GPQR,
+        where *S* is the number of samples and *Q* is the number of quantiles.
+    raw_scales : torch.Tensor, default=0
         The initial untransformed scales of the asymmetric Laplace distribution.
         The actual scales are obtained by applying the positive transformation.
-        Scalar value is broadcasted to the shape of *q*.
+        If tensor, shape should be broadcastable to the shape of *q*.
+        Scalar value is repeated to the shape of *q*.
     learn_scales : bool, default=True
         Whether to update scales by gradients.
 
@@ -258,7 +259,7 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
         samples : torch.Tensor
             Samples drawn from the predictive posterior distribution of function values.
             Shape is ``(S, Q, [batch_shape], N)`` for batch GPQR
-            or ``(S, [batch_shape], N, Q)`` for multitask GPQR,
+            and ``(S, [batch_shape], N, Q)`` for multitask GPQR,
             where *S* is the number of samples, *Q* is the number of quantiles,
             and *N* is the number of data points.
 

@@ -179,5 +179,6 @@ class BatchCenterGapALDLikelihood(ALDLikelihood):
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        # lp: (Q, [batch_shape], N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=0)

@@ -248,10 +248,9 @@ class MultitaskCenterGapALDLikelihood(ALDLikelihood):
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        lp = super().expected_log_prob(
-            observations, function_dist, *args, **kwargs
-        )  # (N, Q)
-        return lp.sum(dim=1)  # (N,)
+        # lp: ([batch_shape], N, Q)
+        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return lp.sum(dim=-2)
 
 
 class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):

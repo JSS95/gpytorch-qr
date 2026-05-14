@@ -11,14 +11,8 @@ class BayesianQRMixin(abc.ABC):
     Notes
     -----
     Input tensor can have ``([input_batch_shape], N, D)`` shape,
-    where ``input_batch_shape`` are optional leading batch shapes
-    (e.g., for cross validation),
+    where ``input_batch_shape`` are optional batch shapes (e.g., for cross validation),
     *N* is the number of data points and *D* is the number of input dimensions.
-
-    Internal variational distribution and modules (e.g., prior mean and covariance)
-    should have batch shape ``(Q, [module_batch_shape])``, where *Q* is the number
-    of quantiles and ``module_batch_shape`` are shapes broadcastable to
-    ``input_batch_shape``.
 
     Number of batch dimension can be zero or more, but you must fix how many dimensions
     will be supported when you define the concrete class for the model.

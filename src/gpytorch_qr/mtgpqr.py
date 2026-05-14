@@ -23,7 +23,7 @@ to model the correlation structure.
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
 >>> from gpytorch_qr.mtgpqr import MultitaskQuantileGP, MultitaskALDLikelihood
 >>> class MyGP(MultitaskQuantileGP):
-...     def __init__(self, inducing_points, num_quantiles, num_latents):
+...     def __init__(self, inducing_points, num_latents, num_quantiles):
 ...         N, D = inducing_points.size()
 ...         variational_distribution = CholeskyVariationalDistribution(
 ...             N,
@@ -47,7 +47,7 @@ to model the correlation structure.
 ...         super().__init__(variational_strategy, mean_module, covar_module)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> num_latents = len(q) - 2  # recommended to be smaller than q
->>> gp = MyGP(inducing_points, len(q), num_latents=num_latents)
+>>> gp = MyGP(inducing_points, num_latents, len(q))
 >>> likelihood = MultitaskALDLikelihood(q)
 >>> from gpytorch.mlls import VariationalELBO
 >>> gp.train()  # doctest: +IGNORE_OUTPUT
@@ -110,115 +110,29 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
     def joint_quantile_posterior(self, x):
-        """Joint posterior over quantiles at input locations.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        distribution : gpytorch.distributions.MultitaskMultivariateNormal
-            Joint posterior over quantiles at input locations.
-            ``mean`` has shape (N, Q) and ``covariance_matrix`` has shape (N*Q, N*Q),
-            where *Q* is the number of quantiles and *N* is the number of data points.
-        """
         return self(x)
 
     def marginal_quantile_posterior(self, x):
-        """Marginal posterior over quantiles.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        distribution : torch.distributions.Normal
-            Marginal posterior over quantiles at input locations.
-            ``loc`` has shape (N, Q) and ``scale`` has shape (N, Q),
-            where *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self(x)
         return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
 
     def mean_quantiles(self, x):
-        """Predict quantiles by analytical posterior mean.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (N, Q)
-            The predicted quantiles at the input locations.
-        """
         return self(x).mean
 
     def mean_quantiles_mc(self, x, num_samples=10):
-        """Predict quantiles by Monte Carlo mean of the quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the mean.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (N, Q)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
-        return samples.mean(dim=0)  # (N, Q)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.mean(dim=0)
 
     def quantile_quantiles(self, x, q):
-        """Analytic quantile of quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        q : torch.Tensor with shape (q,)
-            The quantile levels.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (q, N, Q)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self.marginal_quantile_posterior(x)
-        return dist.icdf(q.reshape(-1, 1, 1))  # (q, N, Q)
+        shape = [-1] + [1 for _ in range(len(dist.batch_shape))]
+        return dist.icdf(q.reshape(*shape))
 
     def quantile_quantiles_mc(self, x, q, num_samples=10):
-        """Monte Carlo quantile of quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        q : torch.Tensor with shape (q,)
-            The quantile levels.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the quantiles.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (q, N, Q)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
-        return samples.quantile(q, dim=0)  # (q, N, Q)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.quantile(q, dim=0)
 
 
 class MultitaskALDLikelihood(ALDLikelihood):
@@ -229,19 +143,22 @@ class MultitaskALDLikelihood(ALDLikelihood):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, N, Q)
+        function_samples : torch.Tensor with shape (S, [batch_shape], N, Q)
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *N* is the number of data points,
             and *Q* is the number of quantiles.
+
+        Returns
+        -------
+        MultitaskALD
         """
         return MultitaskALD(
-            m=function_samples,  # (S, N, Q)
-            lamda=self.scales,  # (Q,)
-            kappa=self.q,  # (Q,)
+            m=function_samples,
+            lamda=self.scales,
+            kappa=self.q,
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        lp = super().expected_log_prob(
-            observations, function_dist, *args, **kwargs
-        )  # (N, Q)
-        return lp.sum(dim=1)  # (N,)
+        # lp: ([batch_shape], N, Q)
+        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return lp.sum(dim=-2)

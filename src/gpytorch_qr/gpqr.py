@@ -137,6 +137,10 @@ class BatchALDLikelihood(ALDLikelihood):
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *Q* is the number of quantiles,
             and *N* is the number of data points.
+
+        Returns
+        -------
+        BatchALD
         """
         return BatchALD(
             m=function_samples,
@@ -145,5 +149,6 @@ class BatchALDLikelihood(ALDLikelihood):
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        # lp: (Q, [batch_shape], N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=0)
