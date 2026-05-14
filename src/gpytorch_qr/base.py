@@ -9,7 +9,39 @@ __all__ = [
 
 
 class BayesianQRMixin(abc.ABC):
-    """Mixin class for Bayesian quantile regression."""
+    """Mixin class for Bayesian quantile regression.
+
+    Notes
+    -----
+    Input tensor can have ``([input_batch_shape], N, D)`` shape,
+    where ``input_batch_shape`` are optional leading batch shapes
+    (e.g., for cross validation),
+    *N* is the number of data points and *D* is the number of input dimensions.
+
+    Internal variational distribution and modules (e.g., prior mean and covariance)
+    should have batch shape ``(Q, [module_batch_shape])``, where *Q* is the number
+    of quantiles and ``module_batch_shape`` are shapes broadcastable to
+    ``input_batch_shape``.
+
+    Number of batch dimension can be zero or more, but you must fix how many dimensions
+    will be supported when you define the concrete class for the model.
+    In other words, ``len(input_batch_shape)`` and ``len(module_batch_shape)``
+    should be equal and fixed for a concrete model class.
+
+    Batch shapes can be either fixed or variable depending on your purpose.
+    For example, suppose you want to define a model that allows one batch dimension.
+    You can let ``module_batch_shape`` be either ``(1,)`` or ``(B,)``.
+    When the shape is ``(1,)``, the model can accept any input batch but the model
+    parameters will be shared across batches.
+    When the shape is ``(B,)``, the model can only accept input batch with size *B*,
+    but the model parameters will be different across batches.
+
+    It is usually recommended to use ``(B,)`` instead of ``(1,)`` to prevent
+    data leakage across batches, e.g., for cross validation with ``B`` folds.
+
+    The resulting posterior distribution of latent GPs by ``self(x)`` have
+    batch shape ``(Q, [input_batch_shape])`` and event shape ``(N,)``.
+    """
 
     @abc.abstractmethod
     def joint_quantile_posterior(self, x):
@@ -17,12 +49,14 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
 
         Returns
         -------
-        gpytorch.distributions.MultivariateNormal
+        torch.distributions.Distribution
+            Distribution with batch_shape ``(Q, [batch_shape])``
+            and event shape ``(N,)``.
         """
         pass
 
@@ -31,12 +65,14 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
 
         Returns
         -------
         torch.distributions.Distribution
+            Distribution with batch shape ``(Q, [batch_shape], N)``
+            and event shape ``()``.
         """
         raise NotImplementedError
 
@@ -45,14 +81,15 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (Q, N) or (N, Q)
+        quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(Q, [batch_shape], N)`` or ``([batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         raise NotImplementedError
 
@@ -62,7 +99,7 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
         num_samples : int, default=10
             Number of MC samples used to estimate the mean.
@@ -71,7 +108,8 @@ class BayesianQRMixin(abc.ABC):
         -------
         torch.Tensor with shape (Q, N) or (N, Q)
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(Q, [batch_shape], N)`` or ``([batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         pass
 
@@ -80,16 +118,17 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
         q : torch.Tensor with shape (q,)
             The quantile levels.
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (q, Q, N) or (q, N, Q)
+        quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(q, Q, [batch_shape], N)`` or ``(q, [batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         raise NotImplementedError
 
@@ -99,7 +138,7 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
         q : torch.Tensor with shape (q,)
             The quantile levels.
@@ -108,15 +147,54 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (q, Q, N) or (q, N, Q)
+        quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(q, Q, [batch_shape], N)`` or ``(q, [batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         pass
 
 
-class ALDLikelihoodMixin:
+class ALDLikelihoodMixin(abc.ABC):
     """Mixin class for asymmetric Laplace distribution likelihood."""
+
+    @abc.abstractmethod
+    def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor
+            The function samples drawn from the posterior of latent GP.
+            Shape is ``(S, Q, [batch_shape], N)`` for batch GPQR
+            or ``(S, [batch_shape], N, Q)`` for multitask GPQR,
+            where *S* is the number of samples, *Q* is the number of quantiles,
+            and *N* is the number of data points.
+
+        Returns
+        -------
+        torch.distribution.Distribution
+            Batch ALD or multitask ALD.
+        """
+
+    @abc.abstractmethod
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of observations under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor in shape ``([batch_shape], N)``
+            The observed target values.
+        function_dist : torch.distributions.Distribution
+            The distribution over function values
+            with batch shape ``(Q, [batch_shape])`` and event shape ``(N,)``.
+
+        Returns
+        -------
+        torch.Tensor with shape ``([batch_shape], N)``
+            The expected log probability of observations under the ALD likelihood.
+        """
+        ...
 
     def predictive_posterior(self, gp_posterior):
         """Predictive posterior distribution of function values.
@@ -128,8 +206,12 @@ class ALDLikelihoodMixin:
 
         Returns
         -------
-        samples : torch.Tensor with shape (S, Q, N) or (S, N, Q)
+        samples : torch.Tensor
             Samples drawn from the predictive posterior distribution of function values.
+            Shape is ``(S, Q, [batch_shape], N)`` for batch GPQR
+            or ``(S, [batch_shape], N, Q)`` for multitask GPQR,
+            where *S* is the number of samples, *Q* is the number of quantiles,
+            and *N* is the number of data points.
 
         Examples
         --------

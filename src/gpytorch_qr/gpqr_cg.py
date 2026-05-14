@@ -1,4 +1,4 @@
-"""Batch independent GPQR with center-gap representation.
+"""GPQR where quantiles are represented by center-gap and treated as batches.
 
 >>> import torch
 >>> from torch.distributions import Normal

@@ -1,4 +1,4 @@
-"""Multitask GPQR with center-gap representation.
+"""GPQR where quantiles are represented by center-gap and treated as tasks.
 
 Latent GPs model the central quantile and the gaps between quantiles separately.
 

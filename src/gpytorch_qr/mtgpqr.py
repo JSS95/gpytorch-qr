@@ -1,4 +1,4 @@
-"""Multitask GPQR.
+"""GPQR where quantiles are directly represented and treated as tasks.
 
 Latent GPs directly construct quantiles.
 

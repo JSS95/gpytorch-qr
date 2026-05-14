@@ -9,25 +9,21 @@ __all__ = [
 
 
 class BatchALD(torch.distributions.Distribution):
-    """Asymmetric Laplace distribution for batched quantile regression.
+    """Asymmetric Laplace distribution where quantiles are treated as batches.
 
     Parameters
     ----------
-    m : torch.Tensor with shape (S, Q, N)
+    m : torch.Tensor with shape (S, Q, [batch_shape], N)
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape (Q,)
+    lamda : torch.Tensor with shape (Q, [batch_shape])
         The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape (Q,)
+    kappa : torch.Tensor with shape (Q, [batch_shape])
         The quantile levels of the distribution.
 
     Notes
     -----
-    In the context of batch quantile regression, the location parameter *m*
-    corresponds to sample points drawn from posterior distributions of quantile
-    functions.
-    For *Q* quantiles, *S* samples are drawn for *N* data points.
-
-    The value passed to :meth:`log_prob` is the observed *y* values.
+    ``batch_shape`` is for optional additional batches,
+    e.g., cross validation folds.
     """
 
     arg_constraints = {
@@ -40,27 +36,23 @@ class BatchALD(torch.distributions.Distribution):
 
     def __init__(self, m, lamda, kappa):
         self.m = m
-        self.lamda = lamda.unsqueeze(-1)  # (Q, 1)
-        self.kappa = kappa.unsqueeze(-1)  # (Q, 1)
-        batch_shape = torch.broadcast_shapes(
-            m.shape, self.lamda.shape, self.kappa.shape
-        )
-        super().__init__(batch_shape=batch_shape, event_shape=torch.Size([]))
+        self.lamda = lamda.reshape(1, *lamda.shape, 1)
+        self.kappa = kappa.reshape(1, *kappa.shape, 1)
+        super().__init__(m.shape)
 
     def log_prob(self, value):
         """Log probability of the asymmetric Laplace distribution at the given value.
 
         Parameters
         ----------
-        value : torch.Tensor with shape (N,)
-            The values at which to evaluate the log probability.
+        value : torch.Tensor with shape ([batch_shape], N)
+            Observed response variables at which to evaluate the log probability.
 
         Returns
         -------
-        logp : torch.Tensor with shape (S, Q, N)
+        logp : torch.Tensor with shape (S, Q, [batch_shape], N)
             The log probability at the given values for each quantile and sample.
         """
-        # value: (N,)
         residual = value - self.m
         check = residual * (self.kappa - (residual < 0).to(residual))
         logp = (
@@ -68,7 +60,7 @@ class BatchALD(torch.distributions.Distribution):
             + torch.log(1 - self.kappa)
             - torch.log(self.lamda)
             - check / self.lamda
-        )  # (S, Q, N)
+        )
         return logp
 
     def icdf(self, value):
@@ -76,12 +68,12 @@ class BatchALD(torch.distributions.Distribution):
 
         Parameters
         ----------
-        value : torch.Tensor with shape (S, Q, N)
+        value : torch.Tensor with shape (S, Q, [batch_shape], N)
             Probabilities at which to evaluate the inverse CDF. Must be in (0, 1).
 
         Returns
         -------
-        torch.Tensor with shape (S, Q, N)
+        torch.Tensor with shape (S, Q, [batch_shape], N)
             The corresponding quantiles of the distribution.
         """
         return torch.where(

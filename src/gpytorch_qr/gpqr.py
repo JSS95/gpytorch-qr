@@ -1,4 +1,4 @@
-"""GPQR with each quantile as independent batch GP.
+"""GPQR where quantiles are directly represented and treated as batches.
 
 >>> import torch
 >>> from torch.distributions import Normal
@@ -77,16 +77,16 @@ __all__ = [
 
 
 class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
-    """Batch approximate GP for multiple quantiles.
+    """Batch approximate GP for *Q* quantiles.
 
     Parameters
     ----------
     variational_strategy : gpytorch.variational.VariationalStrategy
         The variational strategy.
     mean_module : gpytorch.means.Mean
-        Mean module with batch shape equal to the number of quantiles.
+        Mean module with batch shape ``(Q, [batch_shape])``.
     covar_module : gpytorch.kernels.Kernel
-        Covariance module with batch shape equal to the number of quantiles.
+        Covariance module with batch shape ``(Q, [batch_shape])``.
     """
 
     def __init__(self, variational_strategy, mean_module, covar_module):
@@ -100,134 +100,102 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
     def joint_quantile_posterior(self, x):
-        """Joint posterior over quantiles at input locations.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        distribution : gpytorch.distributions.MultivariateNormal
-            Joint posterior over quantiles at input locations.
-            ``loc`` has shape (Q, N) and ``covariance_matrix`` has shape (Q, N, N),
-            where *Q* is the number of quantiles and *N* is the number of data points.
-        """
         return self(x)
 
     def marginal_quantile_posterior(self, x):
-        """Marginal posterior over quantiles.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        distribution : torch.distributions.Normal
-            Marginal posterior over quantiles at input locations.
-            ``loc`` has shape (Q, N) and ``scale`` has shape (Q, N),
-            where *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self(x)
         return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
 
     def mean_quantiles(self, x):
-        """Predict quantiles by analytical posterior mean.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (Q, N)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         return self(x).mean
 
     def mean_quantiles_mc(self, x, num_samples=10):
-        """Predict quantiles by Monte Carlo mean of the quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the mean.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (Q, N)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
-        return samples.mean(dim=0)  # (Q, N)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.mean(dim=0)
 
     def quantile_quantiles(self, x, q):
-        """Analytic quantile of quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        q : torch.Tensor with shape (q,)
-            The quantile levels.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (q, Q, N)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self.marginal_quantile_posterior(x)
-        return dist.icdf(q.reshape(-1, 1, 1))  # (q, Q, N)
+        shape = [-1] + [1 for _ in range(len(dist.batch_shape))]
+        return dist.icdf(q.reshape(*shape))
 
     def quantile_quantiles_mc(self, x, q, num_samples=10):
-        """Monte Carlo quantile of quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        q : torch.Tensor with shape (q,)
-            The quantile levels.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the quantiles.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (q, Q, N)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, Q, N)
-        return samples.quantile(q, dim=0)  # (q, Q, N)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.quantile(q, dim=0)
 
 
 class BatchALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
-    """ALD likelihood for batch quantile regression.
+    """Likelihood for :class:`BatchALD` with direct quantile representation.
 
     Parameters
     ----------
-    q : torch.Tensor with shape (Q,)
+    q : torch.Tensor with shape (Q, [batch_shape])
         The quantile levels.
+    raw_scales : torch.Tensor with shape (Q, [batch_shape]) or scalar, default=0
+        The initial untransformed scales of the asymmetric Laplace distribution.
+        The actual scales are obtained by applying the positive transformation.
+        Scalar value is broadcasted to the shape of *q*.
+    learn_scales : bool, default=True
+        Whether to update scales by gradients.
+
+    Notes
+    -----
+    The ``batch_shape`` can either be:
+
+    - A broadcastable shape, e.g., ``(1,)``.
+    - A fixed shape, e.g., ``(B,)``.
+
+    Different batch shape representations are allowed for *q* and *raw_scales*.
+    For example, *q* can be in  ``(Q, 1)`` and *raw_scales* can be in ``(Q, B)``.
+    But different choices can lead to vastly different model behavior (see below).
+
+    Usually, if there is no batch dimension, you would want to use:
+
+    - *q* in shape ``(Q,)``.
+    - *raw_scales* in scalar (usually 0).
+    - ``learn_scales=True``.
+
+    If there is batch dimension, you would usually want to use:
+
+    - *q* in shape ``(Q, 1)``.
+    - *raw_scales* in shape ``(Q, B)``.
+    - ``learn_scales=True``.
+
+    First of all, if ``learn_scales`` is False, there is no learnable parameter and
+    broadcasting does not matter.
+    The rest of this section focuses on the case when ``learn_scales`` is True.
+
+    .. rubric:: q
+
+    If batch shape of ``(1,)`` is used, same levels of quantiles are used for
+    all batches.
+    Should different quantile levels be desired for different batches,
+    use batch shape of ``(B,)``.
+    Note that it is impossible to vary the number of quantiles *Q* across batches.
+
+    .. rubric:: raw_scales
+
+    If batch shape of ``(1,)`` is used, same scales are used for all batches.
+    This makes the scales to be updated by gradients averaged across batches.
+    If different batches should be independent, use batch shape of ``(B,)``.
+
+    The quantile dimension of *raw_scales* can be broadcasted as well, which
+    makes the scales to be updated by gradients averaged across quantiles.
+    Avert this if you want different quantiles to be completely independent.
     """
 
-    def __init__(self, q):
+    def __init__(self, q, raw_scales=0.0, learn_scales=True):
         super().__init__()
         self.register_buffer("q", q.float())
-        self.register_parameter(
-            "raw_scales",
-            torch.nn.Parameter(torch.zeros(len(q))),
-        )
+
+        raw_scales = torch.as_tensor(raw_scales, dtype=torch.float32)
+        if raw_scales.ndim == 0:
+            raw_scales = torch.full_like(q, raw_scales)
+        if learn_scales:
+            self.register_parameter("raw_scales", torch.nn.Parameter(raw_scales))
+        else:
+            self.register_buffer("raw_scales", raw_scales)
         self.register_constraint("raw_scales", gpytorch.constraints.Positive())
 
     @property
@@ -235,22 +203,12 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
     def forward(self, function_samples):
-        """Return the ALD distribution for the given function samples.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor with shape (S, Q, N)
-            The function samples drawn from the posterior of quantile functions.
-            *S* is the number of samples, *Q* is the number of quantiles,
-            and *N* is the number of data points.
-        """
         return BatchALD(
-            m=function_samples,  # (S, Q, N)
-            lamda=self.scales,  # (Q,)
-            kappa=self.q,  # (Q,)
+            m=function_samples,
+            lamda=self.scales,
+            kappa=self.q,
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        # lp: (Q, N)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=-2)  # (N,)
+        return lp.sum(dim=0)
