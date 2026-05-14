@@ -1,21 +1,14 @@
 Direct GPQR
 ===========
 
-Models the quantiles directly, without any structural constraints.
-Structurally simple, but may suffer from quantile crossing.
+Batch
+-----
 
-Useful when:
-- Only one quantile is of interest.
-- Quantile crossing is not a concern.
+.. automodule:: gpytorch_qr.gpqr
+    :members:
 
 Multitask
 ---------
 
 .. automodule:: gpytorch_qr.mtgpqr
-    :members:
-
-Batch Independent
------------------
-
-.. automodule:: gpytorch_qr.gpqr
     :members:

@@ -1,15 +1,38 @@
 import abc
 
-import torch
-
 __all__ = [
     "BayesianQRMixin",
-    "ALDLikelihoodMixin",
 ]
 
 
 class BayesianQRMixin(abc.ABC):
-    """Mixin class for Bayesian quantile regression."""
+    """Mixin class for Bayesian quantile regression.
+
+    Notes
+    -----
+    Input tensor can have ``([input_batch_shape], N, D)`` shape,
+    where ``input_batch_shape`` are optional batch shapes (e.g., for cross validation),
+    *N* is the number of data points and *D* is the number of input dimensions.
+
+    Number of batch dimension can be zero or more, but you must fix how many dimensions
+    will be supported when you define the concrete class for the model.
+    In other words, ``len(input_batch_shape)`` and ``len(module_batch_shape)``
+    should be equal and fixed for a concrete model class.
+
+    Batch shapes can be either fixed or variable depending on your purpose.
+    For example, suppose you want to define a model that allows one batch dimension.
+    You can let ``module_batch_shape`` be either ``(1,)`` or ``(B,)``.
+    When the shape is ``(1,)``, the model can accept any input batch but the model
+    parameters will be shared across batches.
+    When the shape is ``(B,)``, the model can only accept input batch with size *B*,
+    but the model parameters will be different across batches.
+
+    It is usually recommended to use ``(B,)`` instead of ``(1,)`` to prevent
+    data leakage across batches, e.g., for cross validation with ``B`` folds.
+
+    The resulting posterior distribution of latent GPs by ``self(x)`` have
+    batch shape ``(Q, [input_batch_shape])`` and event shape ``(N,)``.
+    """
 
     @abc.abstractmethod
     def joint_quantile_posterior(self, x):
@@ -17,12 +40,14 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
 
         Returns
         -------
-        gpytorch.distributions.MultivariateNormal
+        torch.distributions.Distribution
+            Distribution with batch_shape ``(Q, [batch_shape])``
+            and event shape ``(N,)``.
         """
         pass
 
@@ -31,12 +56,14 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
 
         Returns
         -------
         torch.distributions.Distribution
+            Distribution with batch shape ``(Q, [batch_shape], N)``
+            and event shape ``()``.
         """
         raise NotImplementedError
 
@@ -45,14 +72,15 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (Q, N) or (N, Q)
+        quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(Q, [batch_shape], N)`` or ``([batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         raise NotImplementedError
 
@@ -62,7 +90,7 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
         num_samples : int, default=10
             Number of MC samples used to estimate the mean.
@@ -71,7 +99,8 @@ class BayesianQRMixin(abc.ABC):
         -------
         torch.Tensor with shape (Q, N) or (N, Q)
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(Q, [batch_shape], N)`` or ``([batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         pass
 
@@ -80,16 +109,17 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
         q : torch.Tensor with shape (q,)
             The quantile levels.
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (q, Q, N) or (q, N, Q)
+        quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(q, Q, [batch_shape], N)`` or ``(q, [batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         raise NotImplementedError
 
@@ -99,7 +129,7 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape (N, D)
+        x : torch.Tensor with shape ([batch_shape], N, D)
             The input locations.
         q : torch.Tensor with shape (q,)
             The quantile levels.
@@ -108,40 +138,9 @@ class BayesianQRMixin(abc.ABC):
 
         Returns
         -------
-        quantiles : torch.Tensor with shape (q, Q, N) or (q, N, Q)
+        quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
+            The shape is ``(q, Q, [batch_shape], N)`` or ``(q, [batch_shape], N, Q)``,
+            where *Q* is the number of quantiles and *N* is the number of data points.
         """
         pass
-
-
-class ALDLikelihoodMixin:
-    """Mixin class for asymmetric Laplace distribution likelihood."""
-
-    def predictive_posterior(self, gp_posterior):
-        """Predictive posterior distribution of function values.
-
-        Parameters
-        ----------
-        gp_posterior : gpytorch.distributions.MultivariateNormal
-            The joint posterior over latent GPs at input locations.
-
-        Returns
-        -------
-        samples : torch.Tensor with shape (S, Q, N) or (S, N, Q)
-            Samples drawn from the predictive posterior distribution of function values.
-
-        Examples
-        --------
-        Get 95% predictive intervals:
-
-        .. code-block:: python
-
-            with torch.no_grad(), gpytorch.settings.num_likelihood_samples(1000):
-                pp_dist = gp(x_pred)
-            ci_lower = pp_dist.quantile(0.025, dim=0)
-            ci_upper = pp_dist.quantile(0.975, dim=0)
-        """
-        ald = self(gp_posterior)
-        u = torch.rand_like(ald.m)
-        return ald.icdf(u)
