@@ -61,9 +61,33 @@ jobs:
 
       - run: pytest
 
+  example-test:
+
+      needs: lint
+
+      runs-on: ubuntu-latest
+
+      steps:
+
+        - name: get repo
+          uses: actions/checkout@v3
+
+        - name: set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: "3.12"
+
+        - name: install package
+          run: |
+            pip install .[test]
+
+        - run: |
+            GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
+            GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
+
   doc:
 
-    needs: unit-test
+    needs: [unit-test, example-test]
 
     runs-on: ubuntu-latest
 

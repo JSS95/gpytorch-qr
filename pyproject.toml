@@ -43,6 +43,8 @@ test = [
     "pytest",
     "pytest-doctestplus",
     "matplotlib",
+    "nbconvert",
+    "ipykernel",
 ]
 doc = [
     "sphinx",
@@ -56,7 +58,6 @@ dev = [
     "flake8",
     "black[jupyter]",
     "isort",
-    "nbconvert",
     "nbstripout",
     "gpytorch-qr[test,doc]",
 ]
