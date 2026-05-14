@@ -1,10 +1,7 @@
 import abc
 
-import torch
-
 __all__ = [
     "BayesianQRMixin",
-    "ALDLikelihoodMixin",
 ]
 
 
@@ -153,77 +150,3 @@ class BayesianQRMixin(abc.ABC):
             where *Q* is the number of quantiles and *N* is the number of data points.
         """
         pass
-
-
-class ALDLikelihoodMixin(abc.ABC):
-    """Mixin class for asymmetric Laplace distribution likelihood."""
-
-    @abc.abstractmethod
-    def forward(self, function_samples):
-        """Return the ALD distribution for the given function samples.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor
-            The function samples drawn from the posterior of latent GP.
-            Shape is ``(S, Q, [batch_shape], N)`` for batch GPQR
-            or ``(S, [batch_shape], N, Q)`` for multitask GPQR,
-            where *S* is the number of samples, *Q* is the number of quantiles,
-            and *N* is the number of data points.
-
-        Returns
-        -------
-        torch.distribution.Distribution
-            Batch ALD or multitask ALD.
-        """
-
-    @abc.abstractmethod
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        """Expected log probability of observations under the ALD likelihood.
-
-        Parameters
-        ----------
-        observations : torch.Tensor in shape ``([batch_shape], N)``
-            The observed target values.
-        function_dist : torch.distributions.Distribution
-            The distribution over function values
-            with batch shape ``(Q, [batch_shape])`` and event shape ``(N,)``.
-
-        Returns
-        -------
-        torch.Tensor with shape ``([batch_shape], N)``
-            The expected log probability of observations under the ALD likelihood.
-        """
-        ...
-
-    def predictive_posterior(self, gp_posterior):
-        """Predictive posterior distribution of function values.
-
-        Parameters
-        ----------
-        gp_posterior : gpytorch.distributions.MultivariateNormal
-            The joint posterior over latent GPs at input locations.
-
-        Returns
-        -------
-        samples : torch.Tensor
-            Samples drawn from the predictive posterior distribution of function values.
-            Shape is ``(S, Q, [batch_shape], N)`` for batch GPQR
-            or ``(S, [batch_shape], N, Q)`` for multitask GPQR,
-            where *S* is the number of samples, *Q* is the number of quantiles,
-            and *N* is the number of data points.
-
-        Examples
-        --------
-        Get 95% predictive intervals:
-
-        .. code-block:: python
-
-            with torch.no_grad(), gpytorch.settings.num_likelihood_samples(1000):
-                pp_dist = gp(x_pred)
-            ci_lower = pp_dist.quantile(0.025, dim=0)
-            ci_upper = pp_dist.quantile(0.975, dim=0)
-        """
-        ald = self(gp_posterior)
-        u = torch.rand_like(ald.m)
-        return ald.icdf(u)

@@ -77,8 +77,8 @@ to model the correlation structure.
 import gpytorch
 import torch
 
-from .ald import MultitaskALD
-from .base import ALDLikelihoodMixin, BayesianQRMixin
+from .ald import ALDLikelihood, MultitaskALD
+from .base import BayesianQRMixin
 
 __all__ = [
     "MultitaskQuantileGP",
@@ -221,23 +221,8 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return samples.quantile(q, dim=0)  # (q, N, Q)
 
 
-class MultitaskALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
-    """ALD likelihood for multitask quantile regression.
-
-    Parameters
-    ----------
-    q : torch.Tensor with shape (Q,)
-        The quantile levels.
-    """
-
-    def __init__(self, q):
-        super().__init__()
-        self.register_buffer("q", q.float())
-        self.register_parameter(
-            "raw_scales",
-            torch.nn.Parameter(torch.zeros(len(q))),
-        )
-        self.register_constraint("raw_scales", gpytorch.constraints.Positive())
+class MultitaskALDLikelihood(ALDLikelihood):
+    """Likelihood for :class:`MultitaskALD` with direct quantile representation."""
 
     @property
     def scales(self):

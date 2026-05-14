@@ -76,8 +76,8 @@
 import gpytorch
 import torch
 
-from .ald import BatchALD
-from .base import ALDLikelihoodMixin, BayesianQRMixin
+from .ald import ALDLikelihood, BatchALD
+from .base import BayesianQRMixin
 from .centergap import centergap_to_quantiles, transform_centergap_posterior
 
 __all__ = [
@@ -181,8 +181,8 @@ class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return samples.quantile(q, dim=0)  # (q, Q, N)
 
 
-class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
-    """ALD likelihood for batch quantile regression with center-gap representation.
+class BatchCenterGapALDLikelihood(ALDLikelihood):
+    """Likelihood for :class:`BatchALD` with center-gap representation.
 
     Parameters
     ----------
@@ -190,16 +190,16 @@ class BatchCenterGapALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihood
         The quantile levels.
     central_quantile_index : int
         The index of the central quantile in the quantile levels.
+    raw_scales : torch.Tensor with shape (Q, [batch_shape]) or scalar, default=0
+        The initial untransformed scales of the asymmetric Laplace distribution.
+        The actual scales are obtained by applying the positive transformation.
+        Scalar value is broadcasted to the shape of *q*.
+    learn_scales : bool, default=True
+        Whether to update scales by gradients.
     """
 
-    def __init__(self, q, central_quantile_index):
-        super().__init__()
-        self.register_buffer("q", q.float())
-        self.register_parameter(
-            "raw_scales",
-            torch.nn.Parameter(torch.zeros(len(q))),
-        )
-        self.register_constraint("raw_scales", gpytorch.constraints.Positive())
+    def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
+        super().__init__(q, raw_scales, learn_scales)
         central_quantile = self.q[central_quantile_index]
         self.lower_count = (self.q < central_quantile).count_nonzero()
 
