@@ -1,10 +1,10 @@
 Utilities
 =========
 
-Base class
-----------
+Gaussian processes
+------------------
 
-.. automodule:: gpytorch_qr.base
+.. automodule:: gpytorch_qr.gp
     :members:
 
 Asymmetric laplace distribution

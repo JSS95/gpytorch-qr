@@ -68,7 +68,7 @@ import gpytorch
 import torch
 
 from .ald import ALDLikelihood, BatchALD
-from .base import BayesianQRMixin
+from .gp import BayesianQRMixin
 
 __all__ = [
     "BatchQuantileGP",

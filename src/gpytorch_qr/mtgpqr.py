@@ -78,7 +78,7 @@ import gpytorch
 import torch
 
 from .ald import ALDLikelihood, MultitaskALD
-from .base import BayesianQRMixin
+from .gp import BayesianQRMixin
 
 __all__ = [
     "MultitaskQuantileGP",

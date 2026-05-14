@@ -101,8 +101,8 @@ import gpytorch
 import torch
 
 from .ald import ALDLikelihood, MultitaskALD
-from .base import BayesianQRMixin
 from .centergap import centergap_to_quantiles, transform_centergap_posterior
+from .gp import BayesianQRMixin
 
 __all__ = [
     "MultitaskCenterGapQuantileGP",

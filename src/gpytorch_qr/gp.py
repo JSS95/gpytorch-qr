@@ -1,3 +1,5 @@
+"""Gaussian process classes for quantile regression."""
+
 import abc
 
 __all__ = [
@@ -10,28 +12,15 @@ class BayesianQRMixin(abc.ABC):
 
     Notes
     -----
-    Input tensor can have ``([input_batch_shape], N, D)`` shape,
-    where ``input_batch_shape`` are optional batch shapes (e.g., for cross validation),
+    Input tensor ``x`` should have ``([B, ...], N, D)`` shape, where ``[B, ...]`` are
+    optional batch shapes (e.g., for cross validation),
     *N* is the number of data points and *D* is the number of input dimensions.
 
-    Number of batch dimension can be zero or more, but you must fix how many dimensions
-    will be supported when you define the concrete class for the model.
-    In other words, ``len(input_batch_shape)`` and ``len(module_batch_shape)``
-    should be equal and fixed for a concrete model class.
+    If the model treats quantile dimension as batch output, the output distribution
+    must have *Q* quantiles in its first batch dimension.
 
-    Batch shapes can be either fixed or variable depending on your purpose.
-    For example, suppose you want to define a model that allows one batch dimension.
-    You can let ``module_batch_shape`` be either ``(1,)`` or ``(B,)``.
-    When the shape is ``(1,)``, the model can accept any input batch but the model
-    parameters will be shared across batches.
-    When the shape is ``(B,)``, the model can only accept input batch with size *B*,
-    but the model parameters will be different across batches.
-
-    It is usually recommended to use ``(B,)`` instead of ``(1,)`` to prevent
-    data leakage across batches, e.g., for cross validation with ``B`` folds.
-
-    The resulting posterior distribution of latent GPs by ``self(x)`` have
-    batch shape ``(Q, [input_batch_shape])`` and event shape ``(N,)``.
+    If the model treats quantile dimension as multitask output, the output distribution
+    must have *Q* quantiles in its last event dimension.
     """
 
     @abc.abstractmethod
@@ -40,14 +29,16 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape ([batch_shape], N, D)
+        x : torch.Tensor with shape ([B, ...], N, D)
             The input locations.
 
         Returns
         -------
         torch.distributions.Distribution
-            Distribution with batch_shape ``(Q, [batch_shape])``
-            and event shape ``(N,)``.
+            For batch quantile output, the distribution has batch shape
+            ``(Q, [B, ...])`` and event shape ``(N,)``.
+            For multitask quantile output, the distribution has batch shape ``[B, ...]``
+            and event shape ``(N, Q)``.
         """
         pass
 
@@ -56,14 +47,16 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape ([batch_shape], N, D)
+        x : torch.Tensor with shape ([B, ...], N, D)
             The input locations.
 
         Returns
         -------
         torch.distributions.Distribution
-            Distribution with batch shape ``(Q, [batch_shape], N)``
-            and event shape ``()``.
+            For batch quantile output, the distribution has batch shape
+            ``(Q, [B, ...])`` and event shape ``(N,)``.
+            For multitask quantile output, the distribution has batch shape ``[B, ...]``
+            and event shape ``(N, Q)``.
         """
         raise NotImplementedError
 
@@ -72,15 +65,15 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape ([batch_shape], N, D)
+        x : torch.Tensor with shape ([B, ...], N, D)
             The input locations.
 
         Returns
         -------
         quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            The shape is ``(Q, [batch_shape], N)`` or ``([batch_shape], N, Q)``,
-            where *Q* is the number of quantiles and *N* is the number of data points.
+            For batch quantile output, the shape is ``(Q, [B, ...], N)``.
+            For multitask quantile output, the shape is ``([B, ...], N, Q)``.
         """
         raise NotImplementedError
 
@@ -90,17 +83,17 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape ([batch_shape], N, D)
+        x : torch.Tensor with shape ([B, ...], N, D)
             The input locations.
         num_samples : int, default=10
             Number of MC samples used to estimate the mean.
 
         Returns
         -------
-        torch.Tensor with shape (Q, N) or (N, Q)
+        torch.Tensor
             The predicted quantiles at the input locations.
-            The shape is ``(Q, [batch_shape], N)`` or ``([batch_shape], N, Q)``,
-            where *Q* is the number of quantiles and *N* is the number of data points.
+            For batch quantile output, the shape is ``(Q, [B, ...], N)``.
+            For multitask quantile output, the shape is ``([B, ...], N, Q)``.
         """
         pass
 
@@ -109,7 +102,7 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape ([batch_shape], N, D)
+        x : torch.Tensor with shape ([B, ...], N, D)
             The input locations.
         q : torch.Tensor with shape (q,)
             The quantile levels.
@@ -118,8 +111,8 @@ class BayesianQRMixin(abc.ABC):
         -------
         quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            The shape is ``(q, Q, [batch_shape], N)`` or ``(q, [batch_shape], N, Q)``,
-            where *Q* is the number of quantiles and *N* is the number of data points.
+            For batch quantile output, the shape is ``(q, Q, [B, ...], N)``.
+            For multitask quantile output, the shape is ``(q, [B, ...], N, Q)``.
         """
         raise NotImplementedError
 
@@ -129,7 +122,7 @@ class BayesianQRMixin(abc.ABC):
 
         Parameters
         ----------
-        x : torch.Tensor with shape ([batch_shape], N, D)
+        x : torch.Tensor with shape ([B, ...], N, D)
             The input locations.
         q : torch.Tensor with shape (q,)
             The quantile levels.
@@ -140,7 +133,7 @@ class BayesianQRMixin(abc.ABC):
         -------
         quantiles : torch.Tensor
             The predicted quantiles at the input locations.
-            The shape is ``(q, Q, [batch_shape], N)`` or ``(q, [batch_shape], N, Q)``,
-            where *Q* is the number of quantiles and *N* is the number of data points.
+            For batch quantile output, the shape is ``(q, Q, [B, ...], N)``.
+            For multitask quantile output, the shape is ``(q, [B, ...], N, Q)``.
         """
         pass
