@@ -147,8 +147,8 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
     - A fixed shape, e.g., ``(B,)``.
 
     Different batch shape representations are allowed for *q* and *raw_scales*.
-    For example, *q* can be in  ``(Q, 1)`` and *raw_scales* can be in ``(Q, B)``.
-    But different choices can lead to vastly different model behavior (see below).
+    For example, *q* can be in  ``(Q, 1)`` while *raw_scales* is in ``(Q, B)``.
+    However, different choices can lead to vastly different model behavior.
 
     Usually, if there is no batch dimension, you would want to use:
 
@@ -162,27 +162,31 @@ class BatchALDLikelihood(gpytorch.likelihoods.Likelihood, ALDLikelihoodMixin):
     - *raw_scales* in shape ``(Q, B)``.
     - ``learn_scales=True``.
 
-    First of all, if ``learn_scales`` is False, there is no learnable parameter and
-    broadcasting does not matter.
-    The rest of this section focuses on the case when ``learn_scales`` is True.
-
     .. rubric:: q
 
     If batch shape of ``(1,)`` is used, same levels of quantiles are used for
     all batches.
     Should different quantile levels be desired for different batches,
     use batch shape of ``(B,)``.
+
     Note that it is impossible to vary the number of quantiles *Q* across batches.
 
     .. rubric:: raw_scales
 
     If batch shape of ``(1,)`` is used, same scales are used for all batches.
-    This makes the scales to be updated by gradients averaged across batches.
-    If different batches should be independent, use batch shape of ``(B,)``.
+    When ``learn_scales`` is True, this makes the scales to be updated by gradients
+    averaged across batches.
+    To allow different batches to have different scales, use batch shape of ``(B,)``.
 
-    The quantile dimension of *raw_scales* can be broadcasted as well, which
-    makes the scales to be updated by gradients averaged across quantiles.
-    Avert this if you want different quantiles to be completely independent.
+    The quantile dimension of *raw_scales* can be broadcasted as well by using
+    quantile shape of *1* instead of *Q*.
+    When ``learn_scales`` is True, this makes the scales to be updated by gradients
+    averaged across quantiles.
+
+    .. rubric:: learn_scales
+
+    If ``learn_scales`` is False, there is no learnable parameter and
+    broadcasting does not matter.
     """
 
     def __init__(self, q, raw_scales=0.0, learn_scales=True):
