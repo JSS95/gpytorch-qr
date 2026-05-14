@@ -145,65 +145,25 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixi
     def forward(self, x):
         center_mean = self.center_mean(x)
         gap_mean = self.gap_mean(x)
-        mean = torch.concat([center_mean.unsqueeze(0), gap_mean], dim=0)
+        if center_mean.ndim == gap_mean.ndim - 1:
+            # singleton dimension is not passed to the mean module
+            center_mean = center_mean.unsqueeze(-2)
+        mean = torch.concat([center_mean, gap_mean], dim=-2)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
 
     def joint_quantile_posterior(self, x):
-        """Joint posterior over quantiles at input locations.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-
-        Returns
-        -------
-        quantile_posterior : torch.distributions.TransformedDistribution
-            Joint posterior over quantiles at input locations.
-        """
         return transform_centergap_posterior(self(x), self.num_lower_quantiles)
 
     def mean_quantiles_mc(self, x, num_samples=10):
-        """Predict quantiles by MC mean of the quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the mean.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (N, Q)
-            The predicted quantiles at the input locations.
-        """
         dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
-        return samples.mean(dim=0)  # (N, Q)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.mean(dim=0)
 
     def quantile_quantiles_mc(self, x, q, num_samples=10):
-        """Monte Carlo quantile of quantile posterior.
-
-        Parameters
-        ----------
-        x : torch.Tensor with shape (N, D)
-            The input locations.
-        q : torch.Tensor with shape (q,)
-            The quantile levels.
-        num_samples : int, default=10
-            Number of MC samples used to estimate the quantiles.
-
-        Returns
-        -------
-        quantiles : torch.Tensor with shape (q, N, Q)
-            The predicted quantiles at the input locations.
-            *Q* is the number of quantiles and *N* is the number of data points.
-        """
         dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))  # (num_samples, N, Q)
-        return samples.quantile(q, dim=0)  # (q, N, Q)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.quantile(q, dim=0)
 
 
 class MultitaskCenterGapALDLikelihood(ALDLikelihood):
@@ -220,7 +180,7 @@ class MultitaskCenterGapALDLikelihood(ALDLikelihood):
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
         super().__init__(q, raw_scales, learn_scales)
-        central_quantile = self.q[central_quantile_index]
+        central_quantile = self.q[..., central_quantile_index]
         self.lower_count = (self.q < central_quantile).count_nonzero()
 
     def forward(self, function_samples):
@@ -228,7 +188,7 @@ class MultitaskCenterGapALDLikelihood(ALDLikelihood):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, N, 1 + L + U)
+        function_samples : torch.Tensor with shape (S, [batch_shape], N, 1 + L + U)
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *N* is the number of data points,
             *L* is the number of lower quantiles, and *U* is the number of upper
@@ -237,14 +197,14 @@ class MultitaskCenterGapALDLikelihood(ALDLikelihood):
             the next *L* channels correspond to the lower gaps,
             and the last *U* channels correspond to the upper gaps.
         """
-        center = function_samples[:, :, :1]
-        lower_gaps = function_samples[:, :, 1 : 1 + self.lower_count]
-        upper_gaps = function_samples[:, :, 1 + self.lower_count :]
+        center = function_samples[..., :1]
+        lower_gaps = function_samples[..., 1 : 1 + self.lower_count]
+        upper_gaps = function_samples[..., 1 + self.lower_count :]
         quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
         return MultitaskALD(
-            m=quantiles,  # (S, N, Q)
-            lamda=self.scales,  # (Q,)
-            kappa=self.q,  # (Q,)
+            m=quantiles,
+            lamda=self.scales,
+            kappa=self.q,
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
@@ -282,29 +242,26 @@ class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
             latent_dim,
             jitter_val,
         )
-        lmc_coefficients = self.lmc_coefficients.detach().clone()  # (T, Q)
+        # lmc_coefficients: ([batch_shape], T, Q)
+        lmc_coefficients = self.lmc_coefficients.detach().clone()
         del self.lmc_coefficients
 
         num_upper_quantiles = num_quantiles - num_lower_quantiles - 1
         num_upper_latents = num_latents - num_lower_latents - 1
-        self.register_buffer("g0_coeff", torch.ones((1, 1)))
+
+        mask = torch.zeros_like(lmc_coefficients)
+        mask[..., 1 : 1 + num_lower_latents, 1 : 1 + num_lower_quantiles] = 1
+        mask[..., -num_upper_latents:, -num_upper_quantiles:] = 1
+        self.register_buffer("lmc_mask", mask)
+
+        g0_mask = torch.zeros_like(lmc_coefficients)
+        g0_mask[..., 0, 0] = 1
+        self.register_buffer("g0_mask", g0_mask)
+
         self.register_parameter(
-            "lower_lmc_coefficients",
-            torch.nn.Parameter(
-                lmc_coefficients[1 : 1 + num_lower_latents, 1 : 1 + num_lower_quantiles]
-            ),
-        )
-        self.register_parameter(
-            "upper_lmc_coefficients",
-            torch.nn.Parameter(
-                lmc_coefficients[-num_upper_latents:, -num_upper_quantiles:]
-            ),
+            "_lmc_coefficients", torch.nn.Parameter(lmc_coefficients)
         )
 
     @property
     def lmc_coefficients(self):
-        return torch.block_diag(
-            self.g0_coeff,
-            self.lower_lmc_coefficients,
-            self.upper_lmc_coefficients,
-        )
+        return self._lmc_coefficients * self.lmc_mask + self.g0_mask
