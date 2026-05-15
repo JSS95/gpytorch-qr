@@ -64,11 +64,8 @@
 >>> plt.plot(x_pred, mean_q.T)  # doctest: +IGNORE_OUTPUT
 """
 
-import gpytorch
-import torch
-
 from .ald import BatchQuantileALDLikelihood
-from .gp import BayesianQRMixin
+from .gp import DirectGPQR
 
 __all__ = [
     "BatchQuantileGP",
@@ -76,53 +73,20 @@ __all__ = [
 ]
 
 
-class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
+class BatchQuantileGP(DirectGPQR):
     """Batch approximate GP for *Q* quantiles.
 
     Parameters
     ----------
     variational_strategy : gpytorch.variational.VariationalStrategy
         The variational strategy.
+        Must wrap a variational distribution with batch shape ``(Q, *B)``,
+        where *Q* is the number of quantiles.
     mean_module : gpytorch.means.Mean
         Mean module with batch shape ``(Q, *B)``.
     covar_module : gpytorch.kernels.Kernel
         Covariance module with batch shape ``(Q, *B)``.
     """
-
-    def __init__(self, variational_strategy, mean_module, covar_module):
-        super().__init__(variational_strategy)
-        self.mean_module = mean_module
-        self.covar_module = covar_module
-
-    def forward(self, x):
-        mean = self.mean_module(x)
-        covar = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean, covar)
-
-    def joint_quantile_posterior(self, x):
-        return self(x)
-
-    def marginal_quantile_posterior(self, x):
-        dist = self(x)
-        return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
-
-    def mean_quantiles(self, x):
-        return self(x).mean
-
-    def mean_quantiles_mc(self, x, num_samples=10):
-        dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.mean(dim=0)
-
-    def quantile_quantiles(self, x, q):
-        dist = self.marginal_quantile_posterior(x)
-        shape = [-1] + [1 for _ in range(len(dist.batch_shape))]
-        return dist.icdf(q.reshape(*shape))
-
-    def quantile_quantiles_mc(self, x, q, num_samples=10):
-        dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.quantile(q, dim=0)
 
 
 class BatchQuantileGPLikelihood(BatchQuantileALDLikelihood):
