@@ -87,7 +87,7 @@ jobs:
 
   doc:
 
-    needs: [unit-test, example-test]
+    needs: lint
 
     runs-on: ubuntu-latest
 
