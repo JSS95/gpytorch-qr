@@ -86,6 +86,12 @@ class BatchQuantileGP(DirectGPQR):
         Mean module with batch shape ``(Q, *B)``.
     covar_module : gpytorch.kernels.Kernel
         Covariance module with batch shape ``(Q, *B)``.
+
+    Notes
+    -----
+    Posterior distribution is :class:`gpytorch.distributions.MultivariateNormal`
+    with batch shape ``(Q, *B)`` and event shape ``(N,)``
+    for input of shape ``(*B, N, D)``.
     """
 
 
