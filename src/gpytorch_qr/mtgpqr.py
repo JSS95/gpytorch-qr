@@ -74,11 +74,8 @@ to model the correlation structure.
 >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
 """
 
-import gpytorch
-import torch
-
 from .ald import MultitaskQuantileALDLikelihood
-from .gp import BayesianQRMixin
+from .gp import DirectGPQR
 
 __all__ = [
     "MultitaskQuantileGP",
@@ -86,53 +83,33 @@ __all__ = [
 ]
 
 
-class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
+class MultitaskQuantileGP(DirectGPQR):
     """Multitask approximate GP for multiple quantiles.
 
     Parameters
     ----------
     variational_strategy : gpytorch.variational.VariationalStrategy
         The variational strategy.
+        Must wrap a variational distribution with batch shape ``(*B, L)``,
+        where *L* is the number of latent GPs.
     mean_module : gpytorch.means.Mean
-        Mean module with batch shape equal to the number of latent GPs.
+        Mean module with batch shape ``(*B, L)``.
     covar_module : gpytorch.kernels.Kernel
-        Covariance module with batch shape equal to the number of latent GPs.
+        Covariance module with batch shape ``(*B, L)``.
+
+    Notes
+    -----
+    Posterior distribution is
+    :class:`gpytorch.distributions.MultitaskMultivariateNormal`
+    with batch shape ``(*B)`` and event shape ``(N, Q)``
+    for input of shape ``(*B, N, D)``.
+
+    MLL loss is a tensor of shape ``(*B)``.
     """
 
-    def __init__(self, variational_strategy, mean_module, covar_module):
-        super().__init__(variational_strategy)
-        self.mean_module = mean_module
-        self.covar_module = covar_module
-
     def forward(self, x):
-        mean = self.mean_module(x)
-        covar = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean, covar)
-
-    def joint_quantile_posterior(self, x):
-        return self(x)
-
-    def marginal_quantile_posterior(self, x):
-        dist = self(x)
-        return torch.distributions.Normal(dist.mean, dist.variance.sqrt())
-
-    def mean_quantiles(self, x):
-        return self(x).mean
-
-    def mean_quantiles_mc(self, x, num_samples=10):
-        dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.mean(dim=0)
-
-    def quantile_quantiles(self, x, q):
-        dist = self.marginal_quantile_posterior(x)
-        shape = [-1] + [1 for _ in range(len(dist.batch_shape))]
-        return dist.icdf(q.reshape(*shape))
-
-    def quantile_quantiles_mc(self, x, q, num_samples=10):
-        dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.quantile(q, dim=0)
+        # (*B, N, D) -> (*B, L, N, D)
+        return super().forward(x.unsqueeze(-3))
 
 
 class MultitaskQuantileGPLikelihood(MultitaskQuantileALDLikelihood):
