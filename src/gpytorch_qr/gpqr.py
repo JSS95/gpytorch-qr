@@ -16,7 +16,7 @@
 >>> from gpytorch.variational import VariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
->>> from gpytorch_qr.gpqr import BatchQuantileGP, BatchALDLikelihood
+>>> from gpytorch_qr.gpqr import BatchQuantileGP, BatchQuantileGPLikelihood
 >>> class MyGP(BatchQuantileGP):
 ...     def __init__(self, inducing_points, num_quantiles):
 ...         N, D = inducing_points.size()
@@ -38,7 +38,7 @@
 ...         super().__init__(variational_strategy, mean, covar)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> gp = MyGP(inducing_points, len(q))
->>> likelihood = BatchALDLikelihood(q)
+>>> likelihood = BatchQuantileGPLikelihood(q)
 >>> from gpytorch.mlls import VariationalELBO
 >>> gp.train()  # doctest: +IGNORE_OUTPUT
 >>> likelihood.train()  # doctest: +IGNORE_OUTPUT
@@ -67,12 +67,12 @@
 import gpytorch
 import torch
 
-from .ald import ALDLikelihood, BatchALD
+from .ald import BatchQuantileALDLikelihood
 from .gp import BayesianQRMixin
 
 __all__ = [
     "BatchQuantileGP",
-    "BatchALDLikelihood",
+    "BatchQuantileGPLikelihood",
 ]
 
 
@@ -84,9 +84,9 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
     variational_strategy : gpytorch.variational.VariationalStrategy
         The variational strategy.
     mean_module : gpytorch.means.Mean
-        Mean module with batch shape ``(Q, [batch_shape])``.
+        Mean module with batch shape ``(Q, *B)``.
     covar_module : gpytorch.kernels.Kernel
-        Covariance module with batch shape ``(Q, [batch_shape])``.
+        Covariance module with batch shape ``(Q, *B)``.
     """
 
     def __init__(self, variational_strategy, mean_module, covar_module):
@@ -125,30 +125,8 @@ class BatchQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return samples.quantile(q, dim=0)
 
 
-class BatchALDLikelihood(ALDLikelihood):
-    """Likelihood for :class:`BatchALD` with direct quantile representation."""
+class BatchQuantileGPLikelihood(BatchQuantileALDLikelihood):
+    """Likelihood for :class:`BatchQuantileALD` with direct representation."""
 
-    def forward(self, function_samples):
-        """Return the ALD distribution for the given function samples.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor with shape (S, Q, [batch_shape], N)
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of quantiles,
-            and *N* is the number of data points.
-
-        Returns
-        -------
-        BatchALD
-        """
-        return BatchALD(
-            m=function_samples,
-            lamda=self.scales,
-            kappa=self.q,
-        )
-
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        # lp: (Q, [batch_shape], N)
-        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=0)
+    def latent_to_quantiles(self, function_samples):
+        return function_samples

@@ -4,7 +4,7 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
-from gpytorch_qr.gpqr import BatchALDLikelihood, BatchQuantileGP
+from gpytorch_qr.gpqr import BatchQuantileGP, BatchQuantileGPLikelihood
 
 
 def test_gpqr():
@@ -41,7 +41,7 @@ def test_gpqr():
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyQuantileGP(inducing_points, len(q))
-    likelihood = BatchALDLikelihood(q)
+    likelihood = BatchQuantileGPLikelihood(q)
 
     gp.train()
     likelihood.train()
@@ -116,7 +116,7 @@ def test_gpqr_multivariate():
     )
     inducing_points = torch.stack([g1.flatten(), g2.flatten()], dim=1)
     gp = MyQuantileGP(inducing_points, len(q))
-    likelihood = BatchALDLikelihood(q)
+    likelihood = BatchQuantileGPLikelihood(q)
 
     gp.train()
     likelihood.train()

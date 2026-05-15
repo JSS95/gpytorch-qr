@@ -8,7 +8,7 @@ from gpytorch.variational import (
     VariationalStrategy,
 )
 
-from gpytorch_qr.mtgpqr import MultitaskALDLikelihood, MultitaskQuantileGP
+from gpytorch_qr.mtgpqr import MultitaskQuantileGP, MultitaskQuantileGPLikelihood
 
 
 def test_mtgpqr():
@@ -50,7 +50,7 @@ def test_mtgpqr():
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyGP(inducing_points, len(q), num_latents=7)
-    likelihood = MultitaskALDLikelihood(q)
+    likelihood = MultitaskQuantileGPLikelihood(q)
 
     gp.train()
     likelihood.train()
@@ -130,7 +130,7 @@ def test_mtgpqr_multivariate():
     )
     inducing_points = torch.stack([g1.flatten(), g2.flatten()], dim=1)
     gp = MyGP(inducing_points, len(q), num_latents=3)
-    likelihood = MultitaskALDLikelihood(q)
+    likelihood = MultitaskQuantileGPLikelihood(q)
 
     gp.train()
     likelihood.train()
