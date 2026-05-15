@@ -96,7 +96,20 @@ class MultitaskQuantileGP(DirectGPQR):
         Mean module with batch shape ``(*B, L)``.
     covar_module : gpytorch.kernels.Kernel
         Covariance module with batch shape ``(*B, L)``.
+
+    Notes
+    -----
+    Posterior distribution is
+    :class:`gpytorch.distributions.MultitaskMultivariateNormal`
+    with batch shape ``(*B)`` and event shape ``(N, Q)``
+    for input of shape ``(*B, N, D)``.
+
+    MLL loss is a tensor of shape ``(*B)``.
     """
+
+    def forward(self, x):
+        # (*B, N, D) -> (*B, L, N, D)
+        return super().forward(x.unsqueeze(-3))
 
 
 class MultitaskQuantileGPLikelihood(MultitaskQuantileALDLikelihood):

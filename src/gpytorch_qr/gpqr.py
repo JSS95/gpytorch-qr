@@ -92,6 +92,8 @@ class BatchQuantileGP(DirectGPQR):
     Posterior distribution is :class:`gpytorch.distributions.MultivariateNormal`
     with batch shape ``(Q, *B)`` and event shape ``(N,)``
     for input of shape ``(*B, N, D)``.
+
+    MLL loss is a tensor of shape ``(Q, *B)``.
     """
 
 
