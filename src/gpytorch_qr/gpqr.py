@@ -74,14 +74,14 @@ __all__ = [
 
 
 class BatchQuantileGP(DirectGPQR):
-    """Batch approximate GP for *Q* quantiles.
+    """Approximate GP with direct representation and batch quantiles.
 
     Parameters
     ----------
     variational_strategy : gpytorch.variational.VariationalStrategy
         The variational strategy.
         Must wrap a variational distribution with batch shape ``(Q, *B)``,
-        where *Q* is the number of quantiles.
+        where *Q* is the number of quantiles and *B* is additional batch shape.
     mean_module : gpytorch.means.Mean
         Mean module with batch shape ``(Q, *B)``.
     covar_module : gpytorch.kernels.Kernel

@@ -149,12 +149,17 @@ class CenterGapMean(Mean):
     Parameters
     ----------
     center_mean : gpytorch.means.Mean
-        Mean module for the central quantile.
+        Mean module for the central quantile with batch shape ``(1, *B)``.
     gap_mean : gpytorch.means.Mean
-        Mean module for the quantile gaps.
+        Mean module for the quantile gaps with batch shape ``(Q-1, *B)``.
     """
 
     def __init__(self, center_mean, gap_mean):
         super().__init__()
         self.center_mean = center_mean
         self.gap_mean = gap_mean
+
+    def forward(self, x):
+        center_mean = self.center_mean(x)
+        gap_mean = self.gap_mean(x)
+        return torch.concat([center_mean, gap_mean], dim=0)
