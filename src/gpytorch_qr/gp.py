@@ -5,10 +5,13 @@ import abc
 import gpytorch
 import torch
 
+from .centergap import transform_centergap_posterior
+
 __all__ = [
     "BayesianQRMixin",
     "GPQR",
     "DirectGPQR",
+    "CenterGapGPQR",
 ]
 
 
@@ -124,7 +127,14 @@ class BayesianQRMixin(abc.ABC):
 
 
 class GPQR(gpytorch.models.ApproximateGP, BayesianQRMixin):
-    """Base class for Gaussian process quantile regression."""
+    """Base class for Gaussian process quantile regression.
+
+    Parameters
+    ----------
+    variational_strategy : gpytorch.variational.VariationalStrategy
+    mean_module : gpytorch.means.Mean
+    covar_module : gpytorch.kernels.Kernel
+    """
 
     def __init__(self, variational_strategy, mean_module, covar_module):
         super().__init__(variational_strategy)
@@ -135,6 +145,16 @@ class GPQR(gpytorch.models.ApproximateGP, BayesianQRMixin):
         mean = self.mean_module(x)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
+
+    def mean_quantiles_mc(self, x, num_samples=10):
+        dist = self.joint_quantile_posterior(x)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.mean(dim=0)
+
+    def quantile_quantiles_mc(self, x, q, num_samples=10):
+        dist = self.joint_quantile_posterior(x)
+        samples = dist.rsample(torch.Size([num_samples]))
+        return samples.quantile(q, dim=0)
 
 
 class DirectGPQR(GPQR):
@@ -150,17 +170,34 @@ class DirectGPQR(GPQR):
     def mean_quantiles(self, x):
         return self(x).mean
 
-    def mean_quantiles_mc(self, x, num_samples=10):
-        dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.mean(dim=0)
-
     def quantile_quantiles(self, x, q):
         dist = self.marginal_quantile_posterior(x)
         shape = [-1] + [1 for _ in range(len(dist.batch_shape))]
         return dist.icdf(q.reshape(*shape))
 
-    def quantile_quantiles_mc(self, x, q, num_samples=10):
-        dist = self(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.quantile(q, dim=0)
+
+class CenterGapGPQR(GPQR):
+    """Gaussian process quantile regression with center-gap quantile representation.
+
+    Parameters
+    ----------
+    variational_strategy
+    mean_module : gpytorch_qr.centergap.CenterGapMean
+        Mean module for center-gap representation.
+    covar_module
+    num_lower_quantiles : int
+        The number of lower quantiles in center-gap representation.
+    """
+
+    def __init__(
+        self,
+        variational_strategy,
+        mean_module,
+        covar_module,
+        num_lower_quantiles,
+    ):
+        super().__init__(variational_strategy, mean_module, covar_module)
+        self.num_lower_quantiles = num_lower_quantiles
+
+    def joint_quantile_posterior(self, x):
+        return transform_centergap_posterior(self(x), self.num_lower_quantiles)

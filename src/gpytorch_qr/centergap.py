@@ -3,11 +3,13 @@
 import gpytorch
 import torch
 import torch.nn.functional as F
+from gpytorch.means import Mean
 
 __all__ = [
     "centergap_to_quantiles",
     "CenterGapToQuantileTransform",
     "transform_centergap_posterior",
+    "CenterGapMean",
 ]
 
 
@@ -139,3 +141,20 @@ def transform_centergap_posterior(posterior, L):
         raise ValueError("Posterior is not a multivariate normal.")
     transform = CenterGapToQuantileTransform(L, quantile_dim=quantile_dim)
     return torch.distributions.TransformedDistribution(posterior, transform)
+
+
+class CenterGapMean(Mean):
+    """Mean module for center-gap representation.
+
+    Parameters
+    ----------
+    center_mean : gpytorch.means.Mean
+        Mean module for the central quantile.
+    gap_mean : gpytorch.means.Mean
+        Mean module for the quantile gaps.
+    """
+
+    def __init__(self, center_mean, gap_mean):
+        super().__init__()
+        self.center_mean = center_mean
+        self.gap_mean = gap_mean
