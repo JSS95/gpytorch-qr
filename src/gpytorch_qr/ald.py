@@ -75,18 +75,18 @@ class BatchQuantileALD(ALD):
 
     Parameters
     ----------
-    m : torch.Tensor with shape (S, Q, *B, N)
+    m : torch.Tensor with shape ``(S, Q, *B, N)``
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape (Q, *B, 1)
+    lamda : torch.Tensor with shape ``(Q, *B, 1)``
         The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape (Q, *B, 1)
+    kappa : torch.Tensor with shape ``(Q, *B, 1)``
         The quantile levels of the distribution.
 
     Attributes
     ----------
-    m : torch.Tensor with shape (S, Q, *B, N)
-    lamda : torch.Tensor with shape (1, Q, *B, 1)
-    kappa : torch.Tensor with shape (1, Q, *B, 1)
+    m : torch.Tensor with shape ``(S, Q, *B, N)``
+    lamda : torch.Tensor with shape ``(1, Q, *B, 1)``
+    kappa : torch.Tensor with shape ``(1, Q, *B, 1)``
 
     Notes
     -----
@@ -106,12 +106,12 @@ class BatchQuantileALD(ALD):
 
         Parameters
         ----------
-        value : torch.Tensor with shape (*B, N)
+        value : torch.Tensor with shape ``(*B, N)``
             Observed response variables at which to evaluate the log probability.
 
         Returns
         -------
-        logp : torch.Tensor with shape (S, Q, *B, N)
+        logp : torch.Tensor with shape ``(S, Q, *B, N)``
             The log probability at the given values for each quantile and sample.
         """
         return super().log_prob(value.reshape(1, 1, *value.shape))
@@ -122,18 +122,18 @@ class MultitaskQuantileALD(ALD):
 
     Parameters
     ----------
-    m : torch.Tensor with shape (S, *B, N, Q)
+    m : torch.Tensor with shape ``(S, *B, N, Q)``
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape (*B, 1, Q,)
+    lamda : torch.Tensor with shape ``(*B, 1, Q)``
         The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape (*B, 1, Q,)
+    kappa : torch.Tensor with shape ``(*B, 1, Q)``
         The quantile levels of the distribution.
 
     Attributes
     ----------
-    m : torch.Tensor with shape (S, *B, N, Q)
-    lamda : torch.Tensor with shape (1, *B, 1, Q,)
-    kappa : torch.Tensor with shape (1, *B, 1, Q,)
+    m : torch.Tensor with shape ``(S, *B, N, Q)``
+    lamda : torch.Tensor with shape ``(1, *B, 1, Q)``
+    kappa : torch.Tensor with shape ``(1, *B, 1, Q)``
 
     Notes
     -----
@@ -153,12 +153,12 @@ class MultitaskQuantileALD(ALD):
 
         Parameters
         ----------
-        value : torch.Tensor with shape (*B, N)
+        value : torch.Tensor with shape ``(*B, N)``
             Observed response variables at which to evaluate the log probability.
 
         Returns
         -------
-        logp : torch.Tensor with shape (S, *B, N, Q)
+        logp : torch.Tensor with shape ``(S, *B, N, Q)``
             The log probability at the given values for each quantile and sample.
         """
         return super().log_prob(value.reshape(1, *value.shape, 1))
@@ -251,8 +251,8 @@ class BatchQuantileALDLikelihood(ALDLikelihood, abc.ABC):
 
     Attributes
     ----------
-    q : torch.Tensor with shape (Q, *B)
-    raw_scales : torch.Tensor with shape(Q, *B)
+    q : torch.Tensor with shape ``(Q, *B)``
+    raw_scales : torch.Tensor with shape ``(Q, *B)``
     """
 
     def forward(self, function_samples):
@@ -260,7 +260,7 @@ class BatchQuantileALDLikelihood(ALDLikelihood, abc.ABC):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, Q, *B, N)
+        function_samples : torch.Tensor with shape ``(S, Q, *B, N)``
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *Q* is the number of quantiles,
             *B* is the batch shape, and *N* is the number of data points.
@@ -282,7 +282,7 @@ class BatchQuantileALDLikelihood(ALDLikelihood, abc.ABC):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, Q, *B, N)
+        function_samples : torch.Tensor with shape ``(S, Q, *B, N)``
             The function samples drawn from the posterior distributions of latent
             functions.
             *S* is the number of samples, *Q* is the number of quantiles,
@@ -290,7 +290,7 @@ class BatchQuantileALDLikelihood(ALDLikelihood, abc.ABC):
 
         Returns
         -------
-        torch.Tensor with shape (S, Q, *B, N)
+        torch.Tensor with shape ``(S, Q, *B, N)``
             The quantile samples corresponding to the given function samples.
         """
         pass
@@ -300,14 +300,14 @@ class BatchQuantileALDLikelihood(ALDLikelihood, abc.ABC):
 
         Parameters
         ----------
-        observations : torch.Tensor with shape (*B, N)
+        observations : torch.Tensor with shape ``(*B, N)``
             The observed response variables.
         function_dist : torch.distributions.Distribution
             The distribution of the function values at the input locations.
 
         Returns
         -------
-        torch.Tensor with shape (*B, N)
+        torch.Tensor with shape ``(*B, N)``
             The expected log probability of the observed data under the ALD likelihood.
         """
         # lp: (Q, *B, N)
@@ -330,8 +330,8 @@ class MultitaskQuantileALDLikelihood(ALDLikelihood):
 
     Attributes
     ----------
-    q : torch.Tensor with shape (*B, Q)
-    raw_scales : torch.Tensor with shape(*B, Q)
+    q : torch.Tensor with shape ``(*B, Q)``
+    raw_scales : torch.Tensor with shape ``(*B, Q)``
     """
 
     def forward(self, function_samples):
@@ -339,7 +339,7 @@ class MultitaskQuantileALDLikelihood(ALDLikelihood):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape (S, *B, N, Q)
+        function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
             The function samples drawn from the posterior distributions of quantile
             functions. *S* is the number of samples, *Q* is the number of quantiles,
             *B* is the batch shape, and *N* is the number of data points.
@@ -360,14 +360,14 @@ class MultitaskQuantileALDLikelihood(ALDLikelihood):
 
         Parameters
         ----------
-        observations : torch.Tensor with shape (*B, N)
+        observations : torch.Tensor with shape ``(*B, N)``
             The observed response variables.
         function_dist : torch.distributions.Distribution
             The distribution of the function values at the input locations.
 
         Returns
         -------
-        torch.Tensor with shape (*B, Q)
+        torch.Tensor with shape ``(*B, Q)``
             The expected log probability of the observed data under the ALD likelihood.
         """
         # lp: (*B, N, Q)
