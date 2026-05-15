@@ -144,14 +144,23 @@ def transform_centergap_posterior(posterior, L):
 
 
 class CenterGapMean(Mean):
-    """Mean module for center-gap representation.
+    """Mean module for center-gap.
 
     Parameters
     ----------
     center_mean : gpytorch.means.Mean
-        Mean module for the central quantile with batch shape ``(1, *B)``.
+        Mean module for the central quantile.
+        If GPQR treats quantiles as batches, this module should have batch shape
+        ``(1, *B)`` where *B* is additional batch shape.
+        If GPQR treats quantiles as task, this module should have batch shape
+        ``(*B, 1)``.
     gap_mean : gpytorch.means.Mean
-        Mean module for the quantile gaps with batch shape ``(Q-1, *B)``.
+        Mean module for the quantile gaps.
+        If GPQR treats quantiles as batches, this module should have batch shape
+        ``(Q-1, *B)`` where *Q* is the number of quantiles and
+        *B* is additional batch shape.
+        If GPQR treats quantiles as task, this module should have batch shape
+        ``(*B, L-1)`` where *L* is the number of latent GPs.
     """
 
     def __init__(self, center_mean, gap_mean):

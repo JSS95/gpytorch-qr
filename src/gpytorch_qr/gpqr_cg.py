@@ -96,7 +96,6 @@ class BatchCenterGapQuantileGP(CenterGapGPQR):
     covar_module
         Covariance module with batch shape ``(Q, *B)``.
     num_lower_quantiles : int
-        The number of lower quantiles in center-gap representation.
 
     Notes
     -----
