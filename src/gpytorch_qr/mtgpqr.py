@@ -21,7 +21,7 @@ to model the correlation structure.
 >>> from gpytorch.variational import VariationalStrategy, LMCVariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
->>> from gpytorch_qr.mtgpqr import MultitaskQuantileGP, MultitaskALDLikelihood
+>>> from gpytorch_qr.mtgpqr import MultitaskQuantileGP, MultitaskQuantileGPLikelihood
 >>> class MyGP(MultitaskQuantileGP):
 ...     def __init__(self, inducing_points, num_latents, num_quantiles):
 ...         N, D = inducing_points.size()
@@ -48,7 +48,7 @@ to model the correlation structure.
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> num_latents = len(q) - 2  # recommended to be smaller than q
 >>> gp = MyGP(inducing_points, num_latents, len(q))
->>> likelihood = MultitaskALDLikelihood(q)
+>>> likelihood = MultitaskQuantileGPLikelihood(q)
 >>> from gpytorch.mlls import VariationalELBO
 >>> gp.train()  # doctest: +IGNORE_OUTPUT
 >>> likelihood.train()  # doctest: +IGNORE_OUTPUT
@@ -77,12 +77,12 @@ to model the correlation structure.
 import gpytorch
 import torch
 
-from .ald import ALDLikelihood, MultitaskALD
+from .ald import MultitaskQuantileALDLikelihood
 from .gp import BayesianQRMixin
 
 __all__ = [
     "MultitaskQuantileGP",
-    "MultitaskALDLikelihood",
+    "MultitaskQuantileGPLikelihood",
 ]
 
 
@@ -135,30 +135,8 @@ class MultitaskQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
         return samples.quantile(q, dim=0)
 
 
-class MultitaskALDLikelihood(ALDLikelihood):
-    """Likelihood for :class:`MultitaskALD` with direct quantile representation."""
+class MultitaskQuantileGPLikelihood(MultitaskQuantileALDLikelihood):
+    """Likelihood for :class:`MultitaskQuantileALD` with direct representation."""
 
-    def forward(self, function_samples):
-        """Return the ALD distribution for the given function samples.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor with shape (S, [batch_shape], N, Q)
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *N* is the number of data points,
-            and *Q* is the number of quantiles.
-
-        Returns
-        -------
-        MultitaskALD
-        """
-        return MultitaskALD(
-            m=function_samples,
-            lamda=self.scales,
-            kappa=self.q,
-        )
-
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        # lp: ([batch_shape], N, Q)
-        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=-2)
+    def latent_to_quantiles(self, function_samples):
+        return function_samples

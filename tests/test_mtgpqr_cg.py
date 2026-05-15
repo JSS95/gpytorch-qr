@@ -6,8 +6,8 @@ from gpytorch.variational import CholeskyVariationalDistribution, VariationalStr
 
 from gpytorch_qr.mtgpqr_cg import (
     CenterGapLmcVariationalStrategy,
-    MultitaskCenterGapALDLikelihood,
     MultitaskCenterGapQuantileGP,
+    MultitaskCenterGapQuantileGPLikelihood,
 )
 
 
@@ -68,7 +68,7 @@ def test_mtgpqr_cg():
     central_q_index = 2
     num_latents = 7
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
-    likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
+    likelihood = MultitaskCenterGapQuantileGPLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()
@@ -163,7 +163,7 @@ def test_mtgpqr_cg_multivariate():
     central_q_index = 1
     num_latents = 3
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
-    likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
+    likelihood = MultitaskCenterGapQuantileGPLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()

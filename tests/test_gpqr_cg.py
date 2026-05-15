@@ -5,8 +5,8 @@ from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
 from gpytorch_qr.gpqr_cg import (
-    BatchCenterGapALDLikelihood,
     BatchCenterGapQuantileGP,
+    BatchCenterGapQuantileGPLikelihood,
 )
 
 
@@ -49,7 +49,7 @@ def test_gpqr_cg():
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
     gp = MyGP(inducing_points, len(q), central_q_index)
-    likelihood = BatchCenterGapALDLikelihood(q, central_q_index)
+    likelihood = BatchCenterGapQuantileGPLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()
@@ -126,7 +126,7 @@ def test_gpqr_cg_multivariate():
     inducing_points = torch.stack([g1.flatten(), g2.flatten()], dim=1)
     central_q_index = 1
     gp = MyGP(inducing_points, len(q), central_q_index)
-    likelihood = BatchCenterGapALDLikelihood(q, central_q_index)
+    likelihood = BatchCenterGapQuantileGPLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()

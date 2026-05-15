@@ -24,7 +24,7 @@ to model the correlation structure.
 >>> from gpytorch_qr.mtgpqr_cg import (
 ...     MultitaskCenterGapQuantileGP,
 ...     CenterGapLmcVariationalStrategy,
-...     MultitaskCenterGapALDLikelihood,
+...     MultitaskCenterGapQuantileGPLikelihood,
 ... )
 >>> class MyGP(MultitaskCenterGapQuantileGP):
 ...     def __init__(
@@ -71,7 +71,7 @@ to model the correlation structure.
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> num_latents = len(q) - 2  # recommended to be smaller than q
 >>> gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
->>> likelihood = MultitaskCenterGapALDLikelihood(q, central_q_index)
+>>> likelihood = MultitaskCenterGapQuantileGPLikelihood(q, central_q_index)
 >>> from gpytorch.mlls import VariationalELBO
 >>> gp.train()  # doctest: +IGNORE_OUTPUT
 >>> likelihood.train()  # doctest: +IGNORE_OUTPUT
@@ -100,13 +100,13 @@ to model the correlation structure.
 import gpytorch
 import torch
 
-from .ald import ALDLikelihood, MultitaskALD
+from .ald import MultitaskQuantileALDLikelihood
 from .centergap import centergap_to_quantiles, transform_centergap_posterior
 from .gp import BayesianQRMixin
 
 __all__ = [
     "MultitaskCenterGapQuantileGP",
-    "MultitaskCenterGapALDLikelihood",
+    "MultitaskCenterGapQuantileGPLikelihood",
     "CenterGapLmcVariationalStrategy",
 ]
 
@@ -166,8 +166,8 @@ class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixi
         return samples.quantile(q, dim=0)
 
 
-class MultitaskCenterGapALDLikelihood(ALDLikelihood):
-    """Likelihood for :class:`MultitaskALD` with center-gap representation.
+class MultitaskCenterGapQuantileGPLikelihood(MultitaskQuantileALDLikelihood):
+    """Likelihood for :class:`MultitaskQuantileALD` with center-gap representation.
 
     Parameters
     ----------
@@ -183,34 +183,12 @@ class MultitaskCenterGapALDLikelihood(ALDLikelihood):
         central_quantile = self.q[..., central_quantile_index]
         self.lower_count = (self.q < central_quantile).count_nonzero()
 
-    def forward(self, function_samples):
-        """Return the ALD distribution for the given function samples.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor with shape (S, [batch_shape], N, 1 + L + U)
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *N* is the number of data points,
-            *L* is the number of lower quantiles, and *U* is the number of upper
-            quantiles.
-            The first channel corresponds to the central quantile,
-            the next *L* channels correspond to the lower gaps,
-            and the last *U* channels correspond to the upper gaps.
-        """
+    def latent_to_quantiles(self, function_samples):
         center = function_samples[..., :1]
         lower_gaps = function_samples[..., 1 : 1 + self.lower_count]
         upper_gaps = function_samples[..., 1 + self.lower_count :]
         quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
-        return MultitaskALD(
-            m=quantiles,
-            lamda=self.scales,
-            kappa=self.q,
-        )
-
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        # lp: ([batch_shape], N, Q)
-        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=-2)
+        return quantiles
 
 
 class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
