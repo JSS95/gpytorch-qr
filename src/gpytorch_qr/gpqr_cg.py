@@ -17,9 +17,9 @@
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
 >>> from gpytorch_qr.centergap import CenterGapMean
->>> from gpytorch_qr.models import CenterGapGPQR
+>>> from gpytorch_qr.models import CenterGapQuantileGP
 >>> from gpytorch_qr.gpqr_cg import BatchCenterGapQuantileGPLikelihood
->>> class MyGP(CenterGapGPQR):
+>>> class MyGP(CenterGapQuantileGP):
 ...     def __init__(self, inducing_points, num_quantiles, num_lower_quantiles):
 ...         N, D = inducing_points.size()
 ...         variational_distribution = CholeskyVariationalDistribution(

@@ -22,12 +22,12 @@ to model the correlation structure.
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
 >>> from gpytorch_qr.centergap import CenterGapMean
->>> from gpytorch_qr.models import CenterGapGPQR
+>>> from gpytorch_qr.models import CenterGapQuantileGP
 >>> from gpytorch_qr.mtgpqr_cg import (
 ...     CenterGapLmcVariationalStrategy,
 ...     MultitaskCenterGapQuantileGPLikelihood,
 ... )
->>> class MyGP(CenterGapGPQR):
+>>> class MyGP(CenterGapQuantileGP):
 ...     def __init__(
 ...         self,
 ...         inducing_points,

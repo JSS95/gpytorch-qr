@@ -21,9 +21,9 @@ to model the correlation structure.
 >>> from gpytorch.variational import VariationalStrategy, LMCVariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
->>> from gpytorch_qr.models import DirectGPQR
+>>> from gpytorch_qr.models import DirectQuantileGP
 >>> from gpytorch_qr.mtgpqr import MultitaskQuantileGPLikelihood
->>> class MyGP(DirectGPQR):
+>>> class MyGP(DirectQuantileGP):
 ...     def __init__(self, inducing_points, num_latents, num_quantiles):
 ...         N, D = inducing_points.size()
 ...         variational_distribution = CholeskyVariationalDistribution(

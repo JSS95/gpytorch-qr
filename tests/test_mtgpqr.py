@@ -8,7 +8,7 @@ from gpytorch.variational import (
     VariationalStrategy,
 )
 
-from gpytorch_qr.models import DirectGPQR
+from gpytorch_qr.models import DirectQuantileGP
 from gpytorch_qr.mtgpqr import MultitaskQuantileGPLikelihood
 
 
@@ -24,7 +24,7 @@ def test_mtgpqr():
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
-    class MyGP(DirectGPQR):
+    class MyGP(DirectQuantileGP):
         def __init__(self, inducing_points, num_quantiles, num_latents):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -99,7 +99,7 @@ def test_mtgpqr_multivariate():
     y = (mean(x) + torch.randn(x.shape[0]).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.5, 0.9])
 
-    class MyGP(DirectGPQR):
+    class MyGP(DirectQuantileGP):
         def __init__(self, inducing_points, num_quantiles, num_latents):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
