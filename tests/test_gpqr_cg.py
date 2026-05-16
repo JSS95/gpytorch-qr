@@ -40,6 +40,7 @@ def test_gpqr_cg():
             mean = CenterGapMean(
                 ConstantMean(batch_shape=torch.Size([1])),
                 ConstantMean(batch_shape=torch.Size([num_quantiles - 1])),
+                latent_dim=0,
             )
             covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
@@ -112,6 +113,7 @@ def test_gpqr_cg_multivariate():
             mean = CenterGapMean(
                 ConstantMean(batch_shape=torch.Size([1])),
                 ConstantMean(batch_shape=torch.Size([num_quantiles - 1])),
+                latent_dim=0,
             )
             covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),

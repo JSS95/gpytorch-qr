@@ -56,6 +56,7 @@ to model the correlation structure.
 ...         mean = CenterGapMean(
 ...             ConstantMean(batch_shape=torch.Size([1])),
 ...             ConstantMean(batch_shape=torch.Size([num_latents - 1])),
+...             latent_dim=-1,
 ...         )
 ...         covar = ScaleKernel(
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),

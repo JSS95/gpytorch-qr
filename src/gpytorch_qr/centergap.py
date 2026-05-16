@@ -161,14 +161,30 @@ class CenterGapMean(Mean):
         *B* is additional batch shape.
         If GPQR treats quantiles as task, this module should have batch shape
         ``(*B, L-1)`` where *L* is the number of latent GPs.
+    latent_dim : {0, -1}
+        The dimension along which the latent GPs are represented in module batch shape.
+        ``0`` if quantiles are batches, ``-1`` if quantiles are tasks.
     """
 
-    def __init__(self, center_mean, gap_mean):
+    def __init__(self, center_mean, gap_mean, latent_dim):
+        if latent_dim not in {0, -1}:
+            raise ValueError("latent_dim should be either 0 or -1.")
+
         super().__init__()
         self.center_mean = center_mean
         self.gap_mean = gap_mean
+        self.latent_dim = latent_dim
 
     def forward(self, x):
+        """Compute the mean of center-gap representation.
+
+        Parameters
+        ----------
+        x : torch.Tensor in shape (*B, N, D)
+        """
+        # convert x to either (1, *B, N, D) or (*B, 1, N, D)
+        dim = self.latent_dim % (x.ndim - 1)
+        x = x.unsqueeze(dim)
         center_mean = self.center_mean(x)
         gap_mean = self.gap_mean(x)
-        return torch.concat([center_mean, gap_mean], dim=0)
+        return torch.concat([center_mean, gap_mean], dim=dim)

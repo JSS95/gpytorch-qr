@@ -54,6 +54,7 @@ def test_mtgpqr_cg():
             mean = CenterGapMean(
                 ConstantMean(batch_shape=torch.Size([1])),
                 ConstantMean(batch_shape=torch.Size([num_latents - 1])),
+                latent_dim=-1,
             )
             covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
@@ -140,6 +141,7 @@ def test_mtgpqr_cg_multivariate():
             mean = CenterGapMean(
                 ConstantMean(batch_shape=torch.Size([1])),
                 ConstantMean(batch_shape=torch.Size([num_latents - 1])),
+                latent_dim=-1,
             )
             covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
