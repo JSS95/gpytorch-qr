@@ -21,6 +21,7 @@ to model the correlation structure.
 >>> from gpytorch.variational import VariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
+>>> from gpytorch_qr.centergap import CenterGapMean
 >>> from gpytorch_qr.mtgpqr_cg import (
 ...     MultitaskCenterGapQuantileGP,
 ...     CenterGapLmcVariationalStrategy,
@@ -52,21 +53,16 @@ to model the correlation structure.
 ...             num_lower_quantiles=num_lower_quantiles,
 ...             num_lower_latents=num_lower_latents,
 ...         )
-...         center_mean = ConstantMean()
-...         gap_mean = ConstantMean(
-...             batch_shape=torch.Size([num_latents - 1])
+...         mean = CenterGapMean(
+...             ConstantMean(batch_shape=torch.Size([1])),
+...             ConstantMean(batch_shape=torch.Size([num_latents - 1])),
+...             latent_dim=-1,
 ...         )
-...         covar_module = ScaleKernel(
+...         covar = ScaleKernel(
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
 ...             batch_shape=torch.Size([num_latents]),
 ...         )
-...         super().__init__(
-...             variational_strategy,
-...             center_mean,
-...             gap_mean,
-...             covar_module,
-...             num_lower_quantiles,
-...         )
+...         super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> num_latents = len(q) - 2  # recommended to be smaller than q
@@ -101,8 +97,8 @@ import gpytorch
 import torch
 
 from .ald import MultitaskQuantileALDLikelihood
-from .centergap import centergap_to_quantiles, transform_centergap_posterior
-from .gp import BayesianQRMixin
+from .centergap import centergap_to_quantiles
+from .gp import CenterGapGPQR
 
 __all__ = [
     "MultitaskCenterGapQuantileGP",
@@ -111,59 +107,30 @@ __all__ = [
 ]
 
 
-class MultitaskCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
+class MultitaskCenterGapQuantileGP(CenterGapGPQR):
     """Multitask approximate GP for multiple quantiles using center-gap representation.
 
     Parameters
     ----------
     variational_strategy : gpytorch.variational.VariationalStrategy
-        The variational strategy for the Gaussian process.
-    center_mean : gpytorch.means.Mean
-        The mean module for the central quantile.
-    gap_mean : gpytorch.means.Mean
-        The mean module for the gaps between quantiles.
+        The variational strategy.
+        Must wrap a variational distribution with batch shape ``(*B, L)``,
+        where *L* is the number of latent GPs.
+    mean_module : gpytorch_qr.centergap.CenterGapMean
+        Mean module for center-gap representation with batch shape ``(*B, L)``.
     covar_module : gpytorch.kernels.Kernel
-        The covariance module for the Gaussian process.
+        Covariance module with batch shape ``(*B, L)``.
     num_lower_quantiles : int
-        The number of lower quantiles in center-gap representation.
+
+    Notes
+    -----
+    Posterior distribution is
+    :class:`gpytorch.distributions.MultitaskMultivariateNormal`
+    with batch shape ``(*B)`` and event shape ``(N, Q)``
+    for input of shape ``(*B, N, D)``.
+
+    MLL loss is a tensor of shape ``(*B)``.
     """
-
-    def __init__(
-        self,
-        variational_strategy,
-        center_mean,
-        gap_mean,
-        covar_module,
-        num_lower_quantiles,
-    ):
-        super().__init__(variational_strategy)
-        self.center_mean = center_mean
-        self.gap_mean = gap_mean
-        self.covar_module = covar_module
-        self.num_lower_quantiles = num_lower_quantiles
-
-    def forward(self, x):
-        center_mean = self.center_mean(x)
-        gap_mean = self.gap_mean(x)
-        if center_mean.ndim == gap_mean.ndim - 1:
-            # singleton dimension is not passed to the mean module
-            center_mean = center_mean.unsqueeze(-2)
-        mean = torch.concat([center_mean, gap_mean], dim=-2)
-        covar = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean, covar)
-
-    def joint_quantile_posterior(self, x):
-        return transform_centergap_posterior(self(x), self.num_lower_quantiles)
-
-    def mean_quantiles_mc(self, x, num_samples=10):
-        dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.mean(dim=0)
-
-    def quantile_quantiles_mc(self, x, q, num_samples=10):
-        dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.quantile(q, dim=0)
 
 
 class MultitaskCenterGapQuantileGPLikelihood(MultitaskQuantileALDLikelihood):

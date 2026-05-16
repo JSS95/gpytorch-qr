@@ -4,6 +4,7 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
+from gpytorch_qr.centergap import CenterGapMean
 from gpytorch_qr.mtgpqr_cg import (
     CenterGapLmcVariationalStrategy,
     MultitaskCenterGapQuantileGP,
@@ -50,19 +51,16 @@ def test_mtgpqr_cg():
                 num_lower_latents=num_lower_latents,
             )
 
-            center_mean = ConstantMean()
-            gap_mean = ConstantMean(batch_shape=torch.Size([num_latents - 1]))
-            covar_module = ScaleKernel(
+            mean = CenterGapMean(
+                ConstantMean(batch_shape=torch.Size([1])),
+                ConstantMean(batch_shape=torch.Size([num_latents - 1])),
+                latent_dim=-1,
+            )
+            covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(
-                variational_strategy,
-                center_mean,
-                gap_mean,
-                covar_module,
-                num_lower_quantiles,
-            )
+            super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
@@ -140,19 +138,16 @@ def test_mtgpqr_cg_multivariate():
                 num_lower_latents=num_lower_latents,
             )
 
-            center_mean = ConstantMean()
-            gap_mean = ConstantMean(batch_shape=torch.Size([num_latents - 1]))
-            covar_module = ScaleKernel(
+            mean = CenterGapMean(
+                ConstantMean(batch_shape=torch.Size([1])),
+                ConstantMean(batch_shape=torch.Size([num_latents - 1])),
+                latent_dim=-1,
+            )
+            covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(
-                variational_strategy,
-                center_mean,
-                gap_mean,
-                covar_module,
-                num_lower_quantiles,
-            )
+            super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
 
     g1, g2 = torch.meshgrid(
         torch.linspace(0, 1, 2),

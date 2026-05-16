@@ -16,6 +16,7 @@
 >>> from gpytorch.variational import VariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
+>>> from gpytorch_qr.centergap import CenterGapMean
 >>> from gpytorch_qr.gpqr_cg import (
 ...     BatchCenterGapQuantileGP,
 ...     BatchCenterGapQuantileGPLikelihood,
@@ -33,17 +34,16 @@
 ...             variational_distribution,
 ...             learn_inducing_locations=True,
 ...         )
-...         center_mean = ConstantMean()
-...         gap_mean = ConstantMean(
-...             batch_shape=torch.Size([num_quantiles - 1])
+...         mean = CenterGapMean(
+...             ConstantMean(batch_shape=torch.Size([1])),
+...             ConstantMean(batch_shape=torch.Size([num_quantiles - 1])),
+...             latent_dim=0,
 ...         )
 ...         covar = ScaleKernel(
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
 ...             batch_shape=torch.Size([num_quantiles]),
 ...         )
-...         super().__init__(
-...             variational_strategy, center_mean, gap_mean, covar, num_lower_quantiles
-...         )
+...         super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> gp = MyGP(inducing_points, len(q), central_q_index)
@@ -73,12 +73,9 @@
 >>> plt.plot(x_pred, quantiles.T)  # doctest: +IGNORE_OUTPUT
 """
 
-import gpytorch
-import torch
-
 from .ald import BatchQuantileALDLikelihood
-from .centergap import centergap_to_quantiles, transform_centergap_posterior
-from .gp import BayesianQRMixin
+from .centergap import centergap_to_quantiles
+from .gp import CenterGapGPQR
 
 __all__ = [
     "BatchCenterGapQuantileGP",
@@ -86,56 +83,29 @@ __all__ = [
 ]
 
 
-class BatchCenterGapQuantileGP(gpytorch.models.ApproximateGP, BayesianQRMixin):
-    """Batch approximate GP for multiple quantiles using center-gap representation.
+class BatchCenterGapQuantileGP(CenterGapGPQR):
+    """Approximate GP with center-gap representation and batch quantiles.
 
     Parameters
     ----------
-    variational_strategy : gpytorch.variational.VariationalStrategy
-        The variational strategy for the Gaussian process.
-    center_mean : gpytorch.means.Mean
-        The mean module for the central quantile.
-    gap_mean : gpytorch.means.Mean
-        The mean module for the gaps between quantiles.
-    covar_module : gpytorch.kernels.Kernel
-        The covariance module for the Gaussian process.
+    variational_strategy
+        The variational strategy.
+        Must wrap a variational distribution with batch shape ``(Q, *B)``,
+        where *Q* is the number of quantiles and *B* is additional batch shape.
+    mean_module : gpytorch_qr.centergap.CenterGapMean
+        Mean module for center-gap representation with batch shape ``(Q, *B)``.
+    covar_module
+        Covariance module with batch shape ``(Q, *B)``.
     num_lower_quantiles : int
-        The number of lower quantiles in center-gap representation.
+
+    Notes
+    -----
+    Posterior distribution is :class:`gpytorch.distributions.MultivariateNormal`
+    with batch shape ``(Q, *B)`` and event shape ``(N,)``
+    for input of shape ``(*B, N, D)``.
+
+    MLL loss is a tensor of shape ``(Q, *B)``.
     """
-
-    def __init__(
-        self,
-        variational_strategy,
-        center_mean,
-        gap_mean,
-        covar_module,
-        num_lower_quantiles,
-    ):
-        super().__init__(variational_strategy)
-        self.center_mean = center_mean
-        self.gap_mean = gap_mean
-        self.covar_module = covar_module
-        self.num_lower_quantiles = num_lower_quantiles
-
-    def forward(self, x):
-        center_mean = self.center_mean(x)
-        gap_mean = self.gap_mean(x)
-        mean = torch.concat([center_mean.unsqueeze(0), gap_mean], dim=0)
-        covar = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean, covar)
-
-    def joint_quantile_posterior(self, x):
-        return transform_centergap_posterior(self(x), self.num_lower_quantiles)
-
-    def mean_quantiles_mc(self, x, num_samples=10):
-        dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.mean(dim=0)
-
-    def quantile_quantiles_mc(self, x, q, num_samples=10):
-        dist = self.joint_quantile_posterior(x)
-        samples = dist.rsample(torch.Size([num_samples]))
-        return samples.quantile(q, dim=0)
 
 
 class BatchCenterGapQuantileGPLikelihood(BatchQuantileALDLikelihood):

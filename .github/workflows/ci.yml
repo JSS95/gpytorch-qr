@@ -61,11 +61,36 @@ jobs:
 
       - run: pytest
 
-  example-test:
+  find-notebooks:
 
       needs: lint
 
       runs-on: ubuntu-latest
+
+      outputs:
+        notebooks: ${{ steps.list.outputs.notebooks }}
+
+      steps:
+
+        - name: get repo
+          uses: actions/checkout@v3
+
+        - name: list notebooks
+          id: list
+          run: |
+            notebooks=$(find examples -name "*.ipynb" | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "notebooks=$notebooks" >> $GITHUB_OUTPUT
+
+  examples:
+
+      needs: find-notebooks
+
+      runs-on: ubuntu-latest
+
+      strategy:
+        fail-fast: false
+        matrix:
+          notebook: ${{ fromJson(needs.find-notebooks.outputs.notebooks) }}
 
       steps:
 
@@ -81,9 +106,7 @@ jobs:
           run: |
             pip install .[test]
 
-        - run: |
-            GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --execute --to notebook --stdout examples/*.ipynb > /dev/null
-            GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --execute --to notebook --stdout examples/**/*.ipynb > /dev/null
+        - run: GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --execute --to notebook --stdout ${{ matrix.notebook }} > /dev/null
 
   doc:
 

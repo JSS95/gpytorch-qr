@@ -84,7 +84,7 @@ __all__ = [
 
 
 class MultitaskQuantileGP(DirectGPQR):
-    """Multitask approximate GP for multiple quantiles.
+    """Approximate GP with direct representation and multitask quantiles.
 
     Parameters
     ----------
