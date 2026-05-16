@@ -180,7 +180,7 @@ class CenterGapMean(Mean):
 
         Parameters
         ----------
-        x : torch.Tensor in shape (*B, N, D)
+        x : torch.Tensor in shape ``(*B, N, D)``
         """
         # convert x to either (1, *B, N, D) or (*B, 1, N, D)
         dim = self.latent_dim % (x.ndim - 1)
