@@ -16,8 +16,9 @@
 >>> from gpytorch.variational import VariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
->>> from gpytorch_qr.gpqr import BatchQuantileGP, BatchQuantileGPLikelihood
->>> class MyGP(BatchQuantileGP):
+>>> from gpytorch_qr.models import DirectGPQR
+>>> from gpytorch_qr.gpqr import BatchQuantileGPLikelihood
+>>> class MyGP(DirectGPQR):
 ...     def __init__(self, inducing_points, num_quantiles):
 ...         N, D = inducing_points.size()
 ...         variational_distribution = CholeskyVariationalDistribution(
@@ -65,36 +66,10 @@
 """
 
 from .ald import BatchQuantileALDLikelihood
-from .gp import DirectGPQR
 
 __all__ = [
-    "BatchQuantileGP",
     "BatchQuantileGPLikelihood",
 ]
-
-
-class BatchQuantileGP(DirectGPQR):
-    """Approximate GP with direct representation and batch quantiles.
-
-    Parameters
-    ----------
-    variational_strategy : gpytorch.variational.VariationalStrategy
-        The variational strategy.
-        Must wrap a variational distribution with batch shape ``(Q, *B)``,
-        where *Q* is the number of quantiles and *B* is additional batch shape.
-    mean_module : gpytorch.means.Mean
-        Mean module with batch shape ``(Q, *B)``.
-    covar_module : gpytorch.kernels.Kernel
-        Covariance module with batch shape ``(Q, *B)``.
-
-    Notes
-    -----
-    Posterior distribution is :class:`gpytorch.distributions.MultivariateNormal`
-    with batch shape ``(Q, *B)`` and event shape ``(N,)``
-    for input of shape ``(*B, N, D)``.
-
-    MLL loss is a tensor of shape ``(Q, *B)``.
-    """
 
 
 class BatchQuantileGPLikelihood(BatchQuantileALDLikelihood):

@@ -134,6 +134,34 @@ class GPQR(gpytorch.models.ApproximateGP, BayesianQRMixin):
     variational_strategy : gpytorch.variational.VariationalStrategy
     mean_module : gpytorch.means.Mean
     covar_module : gpytorch.kernels.Kernel
+
+    Notes
+    -----
+    Input predictors are expected to have shape ``(*B, N, D)``, where ``*B`` are
+    optional batch shapes (e.g., for cross validation), *N* is the number of data points
+    and *D* is the number of input dimensions.
+
+    Quantiles can be either batch dimension or task dimension with shape *Q*.
+
+    .. rubric:: Batch quantiles
+
+    - ``variational_strategy`` must wrap a variational distribution with batch shape
+      ``(Q, *B)``.
+    - ``mean_module`` and ``covar_module`` must have batch shape ``(Q, *B)``.
+    - Posterior is :class:`gpytorch.distributions.MultivariateNormal`
+      with batch shape ``(Q, *B)`` and event shape ``(N,)``.
+    - MLL loss is a tensor of shape ``(Q, *B)``.
+
+    .. rubric:: Multitask quantiles
+
+    Quantiles are constructed by combination of *L* latent GPs.
+
+    - ``variational_strategy`` must wrap a variational distribution with batch shape
+      ``(*B, L)``.
+    - ``mean_module`` and ``covar_module`` must have batch shape ``(*B, L)``.
+    - Posterior is :class:`gpytorch.distributions.MultitaskMultivariateNormal`
+      with batch shape ``(*B)`` and event shape ``(N, Q)``.
+    - MLL loss is a tensor of shape ``(*B)``.
     """
 
     def __init__(self, variational_strategy, mean_module, covar_module):

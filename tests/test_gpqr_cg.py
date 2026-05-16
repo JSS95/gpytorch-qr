@@ -5,10 +5,8 @@ from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
 from gpytorch_qr.centergap import CenterGapMean
-from gpytorch_qr.gpqr_cg import (
-    BatchCenterGapQuantileGP,
-    BatchCenterGapQuantileGPLikelihood,
-)
+from gpytorch_qr.gpqr_cg import BatchCenterGapQuantileGPLikelihood
+from gpytorch_qr.models import CenterGapGPQR
 
 
 def test_gpqr_cg():
@@ -23,7 +21,7 @@ def test_gpqr_cg():
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
-    class MyGP(BatchCenterGapQuantileGP):
+    class MyGP(CenterGapGPQR):
         def __init__(self, inducing_points, num_quantiles, num_lower_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -96,7 +94,7 @@ def test_gpqr_cg_multivariate():
     y = (mean(x) + torch.randn(x.shape[0]).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.5, 0.9])
 
-    class MyGP(BatchCenterGapQuantileGP):
+    class MyGP(CenterGapGPQR):
         def __init__(self, inducing_points, num_quantiles, num_lower_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(

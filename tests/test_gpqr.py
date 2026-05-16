@@ -4,7 +4,8 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
-from gpytorch_qr.gpqr import BatchQuantileGP, BatchQuantileGPLikelihood
+from gpytorch_qr.gpqr import BatchQuantileGPLikelihood
+from gpytorch_qr.models import DirectGPQR
 
 
 def test_gpqr():
@@ -19,7 +20,7 @@ def test_gpqr():
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
-    class MyQuantileGP(BatchQuantileGP):
+    class MyQuantileGP(DirectGPQR):
         def __init__(self, inducing_points, num_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -89,7 +90,7 @@ def test_gpqr_multivariate():
     y = (mean(x) + torch.randn(x.shape[0]).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.5, 0.9])
 
-    class MyQuantileGP(BatchQuantileGP):
+    class MyQuantileGP(DirectGPQR):
         def __init__(self, inducing_points, num_quantiles):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
