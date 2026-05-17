@@ -1,10 +1,10 @@
 Utilities
 =========
 
-Gaussian processes
-------------------
+Gaussian process models
+-----------------------
 
-.. automodule:: gpytorch_qr.gp
+.. automodule:: gpytorch_qr.models
     :members:
 
 Asymmetric laplace distribution

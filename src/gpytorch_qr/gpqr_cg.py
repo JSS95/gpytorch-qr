@@ -17,11 +17,9 @@
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
 >>> from gpytorch_qr.centergap import CenterGapMean
->>> from gpytorch_qr.gpqr_cg import (
-...     BatchCenterGapQuantileGP,
-...     BatchCenterGapQuantileGPLikelihood,
-... )
->>> class MyGP(BatchCenterGapQuantileGP):
+>>> from gpytorch_qr.models import CenterGapQuantileGP
+>>> from gpytorch_qr.gpqr_cg import BatchCenterGapQuantileGPLikelihood
+>>> class MyGP(CenterGapQuantileGP):
 ...     def __init__(self, inducing_points, num_quantiles, num_lower_quantiles):
 ...         N, D = inducing_points.size()
 ...         variational_distribution = CholeskyVariationalDistribution(
@@ -43,7 +41,7 @@
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
 ...             batch_shape=torch.Size([num_quantiles]),
 ...         )
-...         super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
+...         super().__init__(variational_strategy, mean, covar, 0, num_lower_quantiles)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> gp = MyGP(inducing_points, len(q), central_q_index)
@@ -75,37 +73,10 @@
 
 from .ald import BatchQuantileALDLikelihood
 from .centergap import centergap_to_quantiles
-from .gp import CenterGapGPQR
 
 __all__ = [
-    "BatchCenterGapQuantileGP",
     "BatchCenterGapQuantileGPLikelihood",
 ]
-
-
-class BatchCenterGapQuantileGP(CenterGapGPQR):
-    """Approximate GP with center-gap representation and batch quantiles.
-
-    Parameters
-    ----------
-    variational_strategy
-        The variational strategy.
-        Must wrap a variational distribution with batch shape ``(Q, *B)``,
-        where *Q* is the number of quantiles and *B* is additional batch shape.
-    mean_module : gpytorch_qr.centergap.CenterGapMean
-        Mean module for center-gap representation with batch shape ``(Q, *B)``.
-    covar_module
-        Covariance module with batch shape ``(Q, *B)``.
-    num_lower_quantiles : int
-
-    Notes
-    -----
-    Posterior distribution is :class:`gpytorch.distributions.MultivariateNormal`
-    with batch shape ``(Q, *B)`` and event shape ``(N,)``
-    for input of shape ``(*B, N, D)``.
-
-    MLL loss is a tensor of shape ``(Q, *B)``.
-    """
 
 
 class BatchCenterGapQuantileGPLikelihood(BatchQuantileALDLikelihood):

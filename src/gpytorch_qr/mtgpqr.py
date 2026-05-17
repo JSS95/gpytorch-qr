@@ -21,8 +21,9 @@ to model the correlation structure.
 >>> from gpytorch.variational import VariationalStrategy, LMCVariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
->>> from gpytorch_qr.mtgpqr import MultitaskQuantileGP, MultitaskQuantileGPLikelihood
->>> class MyGP(MultitaskQuantileGP):
+>>> from gpytorch_qr.models import DirectQuantileGP
+>>> from gpytorch_qr.mtgpqr import MultitaskQuantileGPLikelihood
+>>> class MyGP(DirectQuantileGP):
 ...     def __init__(self, inducing_points, num_latents, num_quantiles):
 ...         N, D = inducing_points.size()
 ...         variational_distribution = CholeskyVariationalDistribution(
@@ -44,7 +45,7 @@ to model the correlation structure.
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
 ...             batch_shape=torch.Size([num_latents]),
 ...         )
-...         super().__init__(variational_strategy, mean_module, covar_module)
+...         super().__init__(variational_strategy, mean_module, covar_module, -1)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> num_latents = len(q) - 2  # recommended to be smaller than q
 >>> gp = MyGP(inducing_points, num_latents, len(q))
@@ -75,41 +76,10 @@ to model the correlation structure.
 """
 
 from .ald import MultitaskQuantileALDLikelihood
-from .gp import DirectGPQR
 
 __all__ = [
-    "MultitaskQuantileGP",
     "MultitaskQuantileGPLikelihood",
 ]
-
-
-class MultitaskQuantileGP(DirectGPQR):
-    """Approximate GP with direct representation and multitask quantiles.
-
-    Parameters
-    ----------
-    variational_strategy : gpytorch.variational.VariationalStrategy
-        The variational strategy.
-        Must wrap a variational distribution with batch shape ``(*B, L)``,
-        where *L* is the number of latent GPs.
-    mean_module : gpytorch.means.Mean
-        Mean module with batch shape ``(*B, L)``.
-    covar_module : gpytorch.kernels.Kernel
-        Covariance module with batch shape ``(*B, L)``.
-
-    Notes
-    -----
-    Posterior distribution is
-    :class:`gpytorch.distributions.MultitaskMultivariateNormal`
-    with batch shape ``(*B)`` and event shape ``(N, Q)``
-    for input of shape ``(*B, N, D)``.
-
-    MLL loss is a tensor of shape ``(*B)``.
-    """
-
-    def forward(self, x):
-        # (*B, N, D) -> (*B, L, N, D)
-        return super().forward(x.unsqueeze(-3))
 
 
 class MultitaskQuantileGPLikelihood(MultitaskQuantileALDLikelihood):

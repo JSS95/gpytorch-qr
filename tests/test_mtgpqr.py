@@ -8,7 +8,8 @@ from gpytorch.variational import (
     VariationalStrategy,
 )
 
-from gpytorch_qr.mtgpqr import MultitaskQuantileGP, MultitaskQuantileGPLikelihood
+from gpytorch_qr.models import DirectQuantileGP
+from gpytorch_qr.mtgpqr import MultitaskQuantileGPLikelihood
 
 
 def test_mtgpqr():
@@ -23,7 +24,7 @@ def test_mtgpqr():
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
-    class MyGP(MultitaskQuantileGP):
+    class MyGP(DirectQuantileGP):
         def __init__(self, inducing_points, num_quantiles, num_latents):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -46,7 +47,7 @@ def test_mtgpqr():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(variational_strategy, mean_module, covar_module)
+            super().__init__(variational_strategy, mean_module, covar_module, -1)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyGP(inducing_points, len(q), num_latents=7)
@@ -98,7 +99,7 @@ def test_mtgpqr_multivariate():
     y = (mean(x) + torch.randn(x.shape[0]).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.5, 0.9])
 
-    class MyGP(MultitaskQuantileGP):
+    class MyGP(DirectQuantileGP):
         def __init__(self, inducing_points, num_quantiles, num_latents):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
@@ -121,7 +122,7 @@ def test_mtgpqr_multivariate():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(variational_strategy, mean_module, covar_module)
+            super().__init__(variational_strategy, mean_module, covar_module, -1)
 
     g1, g2 = torch.meshgrid(
         torch.linspace(0, 1, 2),

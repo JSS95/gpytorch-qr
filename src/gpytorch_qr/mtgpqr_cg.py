@@ -22,12 +22,12 @@ to model the correlation structure.
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
 >>> from gpytorch_qr.centergap import CenterGapMean
+>>> from gpytorch_qr.models import CenterGapQuantileGP
 >>> from gpytorch_qr.mtgpqr_cg import (
-...     MultitaskCenterGapQuantileGP,
 ...     CenterGapLmcVariationalStrategy,
 ...     MultitaskCenterGapQuantileGPLikelihood,
 ... )
->>> class MyGP(MultitaskCenterGapQuantileGP):
+>>> class MyGP(CenterGapQuantileGP):
 ...     def __init__(
 ...         self,
 ...         inducing_points,
@@ -62,7 +62,7 @@ to model the correlation structure.
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
 ...             batch_shape=torch.Size([num_latents]),
 ...         )
-...         super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
+...         super().__init__(variational_strategy, mean, covar, -1, num_lower_quantiles)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> num_latents = len(q) - 2  # recommended to be smaller than q
@@ -98,39 +98,11 @@ import torch
 
 from .ald import MultitaskQuantileALDLikelihood
 from .centergap import centergap_to_quantiles
-from .gp import CenterGapGPQR
 
 __all__ = [
-    "MultitaskCenterGapQuantileGP",
     "MultitaskCenterGapQuantileGPLikelihood",
     "CenterGapLmcVariationalStrategy",
 ]
-
-
-class MultitaskCenterGapQuantileGP(CenterGapGPQR):
-    """Multitask approximate GP for multiple quantiles using center-gap representation.
-
-    Parameters
-    ----------
-    variational_strategy : gpytorch.variational.VariationalStrategy
-        The variational strategy.
-        Must wrap a variational distribution with batch shape ``(*B, L)``,
-        where *L* is the number of latent GPs.
-    mean_module : gpytorch_qr.centergap.CenterGapMean
-        Mean module for center-gap representation with batch shape ``(*B, L)``.
-    covar_module : gpytorch.kernels.Kernel
-        Covariance module with batch shape ``(*B, L)``.
-    num_lower_quantiles : int
-
-    Notes
-    -----
-    Posterior distribution is
-    :class:`gpytorch.distributions.MultitaskMultivariateNormal`
-    with batch shape ``(*B)`` and event shape ``(N, Q)``
-    for input of shape ``(*B, N, D)``.
-
-    MLL loss is a tensor of shape ``(*B)``.
-    """
 
 
 class MultitaskCenterGapQuantileGPLikelihood(MultitaskQuantileALDLikelihood):
