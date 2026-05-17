@@ -5,7 +5,7 @@ import abc
 import gpytorch
 import torch
 
-from .centergap import transform_centergap_posterior
+from .utils import transform_centergap_posterior
 
 __all__ = [
     "QuantileGP",

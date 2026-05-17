@@ -1,4 +1,4 @@
-"""Center-gap representation."""
+"""Utility functions."""
 
 import gpytorch
 import torch

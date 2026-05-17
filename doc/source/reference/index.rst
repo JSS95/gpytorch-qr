@@ -26,12 +26,6 @@ Mean modules
 .. automodule:: gpytorch_qr.means
     :members:
 
-Center-gap representation
---------------------------
-
-.. automodule:: gpytorch_qr.centergap
-    :members:
-
 Batch direct GPQR
 -----------------
 
@@ -56,3 +50,8 @@ Multitask center-gap GPQR
 .. automodule:: gpytorch_qr.mtgpqr_cg
     :members:
 
+Center-gap representation
+--------------------------
+
+.. automodule:: gpytorch_qr.utils
+    :members:
