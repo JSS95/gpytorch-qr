@@ -3,8 +3,11 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import doctest
 import os
 import shutil
+
+doctest.register_optionflag("IGNORE_OUTPUT")
 
 examples_source = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "examples")
