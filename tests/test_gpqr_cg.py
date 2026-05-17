@@ -4,8 +4,8 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
-from gpytorch_qr.centergap import CenterGapMean
 from gpytorch_qr.gpqr_cg import BatchCenterGapQuantileGPLikelihood
+from gpytorch_qr.means import CenterGapMean
 from gpytorch_qr.models import CenterGapQuantileGP
 
 

@@ -21,7 +21,7 @@ to model the correlation structure.
 >>> from gpytorch.variational import VariationalStrategy
 >>> from gpytorch.means import ConstantMean
 >>> from gpytorch.kernels import RBFKernel, ScaleKernel
->>> from gpytorch_qr.centergap import CenterGapMean
+>>> from gpytorch_qr.means import CenterGapMean
 >>> from gpytorch_qr.models import CenterGapQuantileGP
 >>> from gpytorch_qr.mtgpqr_cg import (
 ...     CenterGapLmcVariationalStrategy,

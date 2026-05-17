@@ -20,6 +20,12 @@ Asymmetric laplace likelihood
 .. automodule:: gpytorch_qr.likelihoods
     :members:
 
+Mean modules
+------------
+
+.. automodule:: gpytorch_qr.means
+    :members:
+
 Center-gap representation
 --------------------------
 
