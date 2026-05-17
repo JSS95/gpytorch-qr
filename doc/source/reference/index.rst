@@ -32,14 +32,8 @@ Mean modules
 .. automodule:: gpytorch_qr.means
     :members:
 
-Multitask center-gap GPQR
--------------------------
-
-.. automodule:: gpytorch_qr.mtgpqr_cg
-    :members:
-
-Center-gap representation
---------------------------
+Utilities
+---------
 
 .. automodule:: gpytorch_qr.utils
     :members:
