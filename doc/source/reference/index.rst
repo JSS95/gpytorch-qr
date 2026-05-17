@@ -20,6 +20,12 @@ Asymmetric laplace likelihood
 .. automodule:: gpytorch_qr.likelihoods
     :members:
 
+Variational strategies
+----------------------
+
+.. automodule:: gpytorch_qr.variational
+    :members:
+
 Mean modules
 ------------
 
