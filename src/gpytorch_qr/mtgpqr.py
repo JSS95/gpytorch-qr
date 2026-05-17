@@ -75,15 +75,68 @@ to model the correlation structure.
 >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
 """
 
-from .likelihoods import MultitaskQuantileALDLikelihood
+from .distributions import MultitaskQuantileALD
+from .likelihoods import ALDLikelihood
 
 __all__ = [
     "MultitaskQuantileGPLikelihood",
 ]
 
 
-class MultitaskQuantileGPLikelihood(MultitaskQuantileALDLikelihood):
-    """Likelihood for :class:`MultitaskQuantileALD` with direct representation."""
+class MultitaskQuantileGPLikelihood(ALDLikelihood):
+    """Likelihood for :class:`MultitaskQuantileALD` with direct representation.
 
-    def latent_to_quantiles(self, function_samples):
-        return function_samples
+    Parameters
+    ----------
+    q
+        The quantile levels.
+        Shape is ``(*B, Q)``.
+    raw_scales
+        The initial untransformed scales of the asymmetric Laplace distribution.
+        Shape is either ``()`` or ``(*B, Q)``.
+    learn_scales
+
+    Attributes
+    ----------
+    q : torch.Tensor with shape ``(*B, Q)``
+    raw_scales : torch.Tensor with shape ``(*B, Q)``
+    """
+
+    def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            *B* is the batch shape, and *N* is the number of data points.
+
+        Returns
+        -------
+        MultitaskQuantileALD
+        """
+        return MultitaskQuantileALD(
+            m=function_samples,
+            lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
+            kappa=self.q.unsqueeze(-2),  # (*B, 1, Q)
+        )
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            The distribution of the function values at the input locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, Q)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        # lp: (*B, N, Q)
+        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return lp.sum(dim=-2)
