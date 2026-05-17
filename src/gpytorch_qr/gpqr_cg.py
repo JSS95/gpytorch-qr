@@ -71,7 +71,8 @@
 >>> plt.plot(x_pred, quantiles.T)  # doctest: +IGNORE_OUTPUT
 """
 
-from .likelihoods import BatchQuantileALDLikelihood
+from .distributions import BatchQuantileALD
+from .likelihoods import ALDLikelihood
 from .utils import centergap_to_quantiles
 
 __all__ = [
@@ -79,16 +80,25 @@ __all__ = [
 ]
 
 
-class BatchCenterGapQuantileGPLikelihood(BatchQuantileALDLikelihood):
+class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
     """Likelihood for :class:`BatchQuantileALD` with center-gap representation.
 
     Parameters
     ----------
     q
+        The quantile levels.
+        Shape is ``(Q, *B)``.
     central_quantile_index : int
         The index of the central quantile in the quantile levels.
     raw_scales
+        The initial untransformed scales of the asymmetric Laplace distribution.
+        Shape is either ``()`` or ``(Q, *B)``.
     learn_scales
+
+    Attributes
+    ----------
+    q : torch.Tensor with shape ``(Q, *B)``
+    raw_scales : torch.Tensor with shape ``(Q, *B)``
     """
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
@@ -96,11 +106,47 @@ class BatchCenterGapQuantileGPLikelihood(BatchQuantileALDLikelihood):
         central_quantile = self.q[central_quantile_index]
         self.lower_count = (self.q < central_quantile).count_nonzero()
 
-    def latent_to_quantiles(self, function_samples):
+    def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape ``(S, Q, *B, N)``
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            *B* is the batch shape, and *N* is the number of data points.
+
+        Returns
+        -------
+        BatchQuantileALD
+        """
         center = function_samples[:, :1, ...]
         lower_gaps = function_samples[:, 1 : 1 + self.lower_count, ...]
         upper_gaps = function_samples[:, 1 + self.lower_count :, ...]
         quantiles = centergap_to_quantiles(
             center, lower_gaps, upper_gaps, quantile_dim=1
         )
-        return quantiles
+        return BatchQuantileALD(
+            m=quantiles,
+            lamda=self.scales.unsqueeze(-1),  # (Q, *B, 1)
+            kappa=self.q.unsqueeze(-1),  # (Q, *B, 1)
+        )
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            The distribution of the function values at the input locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        # lp: (Q, *B, N)
+        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return lp.sum(dim=0)
