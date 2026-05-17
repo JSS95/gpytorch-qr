@@ -53,6 +53,7 @@ doc = [
     "matplotlib",
     "myst-nb",
     "scikit-learn",
+    "pytest-doctestplus",
 ]
 dev = [
     "flake8",
