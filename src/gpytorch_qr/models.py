@@ -22,6 +22,9 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
     variational_strategy : gpytorch.variational.VariationalStrategy
     mean_module : gpytorch.means.Mean
     covar_module : gpytorch.kernels.Kernel
+    latent_dim : {0, -1}
+        The dimension along which the latent GPs are represented in module batch shape.
+        ``0`` if quantiles are batches, ``-1`` if quantiles are multitasks.
 
     Notes
     -----
@@ -52,12 +55,20 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
     - MLL loss is a tensor of shape ``(*B)``.
     """
 
-    def __init__(self, variational_strategy, mean_module, covar_module):
+    def __init__(self, variational_strategy, mean_module, covar_module, latent_dim):
         super().__init__(variational_strategy)
         self.mean_module = mean_module
         self.covar_module = covar_module
+        if latent_dim == 0:
+            self.unsqueeze_dim = 0
+        elif latent_dim == -1:
+            self.unsqueeze_dim = -3
+        else:
+            raise ValueError("latent_dim should be either 0 or -1.")
 
     def forward(self, x):
+        # x : (*B, N, D) -> (1, *B, N, D) or (*B, 1, N, D)
+        x = x.unsqueeze(self.unsqueeze_dim)
         mean = self.mean_module(x)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
@@ -163,6 +174,7 @@ class CenterGapQuantileGP(QuantileGP):
     mean_module : gpytorch_qr.centergap.CenterGapMean
         Mean module for center-gap representation.
     covar_module
+    latent_dim
     num_lower_quantiles : int
         The number of lower quantiles in center-gap representation.
     """
@@ -172,9 +184,10 @@ class CenterGapQuantileGP(QuantileGP):
         variational_strategy,
         mean_module,
         covar_module,
+        latent_dim,
         num_lower_quantiles,
     ):
-        super().__init__(variational_strategy, mean_module, covar_module)
+        super().__init__(variational_strategy, mean_module, covar_module, latent_dim)
         self.num_lower_quantiles = num_lower_quantiles
 
     def joint_quantile_posterior(self, x):

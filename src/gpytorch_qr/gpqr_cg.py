@@ -41,7 +41,7 @@
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
 ...             batch_shape=torch.Size([num_quantiles]),
 ...         )
-...         super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
+...         super().__init__(variational_strategy, mean, covar, 0, num_lower_quantiles)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> gp = MyGP(inducing_points, len(q), central_q_index)

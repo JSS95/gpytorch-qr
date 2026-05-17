@@ -62,7 +62,7 @@ to model the correlation structure.
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
 ...             batch_shape=torch.Size([num_latents]),
 ...         )
-...         super().__init__(variational_strategy, mean, covar, num_lower_quantiles)
+...         super().__init__(variational_strategy, mean, covar, -1, num_lower_quantiles)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> central_q_index = (q - 0.5).abs().argmin().item()
 >>> num_latents = len(q) - 2  # recommended to be smaller than q

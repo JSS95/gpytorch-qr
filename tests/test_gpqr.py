@@ -38,7 +38,7 @@ def test_gpqr():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
                 batch_shape=torch.Size([num_quantiles]),
             )
-            super().__init__(variational_strategy, mean, covar)
+            super().__init__(variational_strategy, mean, covar, 0)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyQuantileGP(inducing_points, len(q))
@@ -108,7 +108,7 @@ def test_gpqr_multivariate():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
                 batch_shape=torch.Size([num_quantiles]),
             )
-            super().__init__(variational_strategy, mean, covar)
+            super().__init__(variational_strategy, mean, covar, 0)
 
     g1, g2 = torch.meshgrid(
         torch.linspace(0, 1, 2),

@@ -36,7 +36,7 @@
 ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_quantiles])),
 ...             batch_shape=torch.Size([num_quantiles]),
 ...         )
-...         super().__init__(variational_strategy, mean, covar)
+...         super().__init__(variational_strategy, mean, covar, 0)
 >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
 >>> gp = MyGP(inducing_points, len(q))
 >>> likelihood = BatchQuantileGPLikelihood(q)
