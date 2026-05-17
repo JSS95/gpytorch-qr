@@ -32,12 +32,6 @@ Mean modules
 .. automodule:: gpytorch_qr.means
     :members:
 
-Multitask direct GPQR
----------------------
-
-.. automodule:: gpytorch_qr.mtgpqr
-    :members:
-
 Batch center-gap GPQR
 ---------------------
 

@@ -8,8 +8,8 @@ from gpytorch.variational import (
     VariationalStrategy,
 )
 
+from gpytorch_qr.likelihoods import MultitaskQuantileGPLikelihood
 from gpytorch_qr.models import DirectQuantileGP
-from gpytorch_qr.mtgpqr import MultitaskQuantileGPLikelihood
 
 
 def test_mtgpqr():
