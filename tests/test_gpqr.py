@@ -4,7 +4,7 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
-from gpytorch_qr.gpqr import BatchQuantileGPLikelihood
+from gpytorch_qr.likelihoods import BatchQuantileGPLikelihood
 from gpytorch_qr.models import DirectQuantileGP
 
 
