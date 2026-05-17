@@ -71,8 +71,8 @@
 >>> plt.plot(x_pred, quantiles.T)  # doctest: +IGNORE_OUTPUT
 """
 
-from .ald import BatchQuantileALDLikelihood
 from .centergap import centergap_to_quantiles
+from .likelihoods import BatchQuantileALDLikelihood
 
 __all__ = [
     "BatchCenterGapQuantileGPLikelihood",

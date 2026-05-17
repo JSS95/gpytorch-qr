@@ -96,8 +96,8 @@ to model the correlation structure.
 import gpytorch
 import torch
 
-from .ald import MultitaskQuantileALDLikelihood
 from .centergap import centergap_to_quantiles
+from .likelihoods import MultitaskQuantileALDLikelihood
 
 __all__ = [
     "MultitaskCenterGapQuantileGPLikelihood",

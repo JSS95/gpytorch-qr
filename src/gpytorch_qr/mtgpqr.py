@@ -75,7 +75,7 @@ to model the correlation structure.
 >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
 """
 
-from .ald import MultitaskQuantileALDLikelihood
+from .likelihoods import MultitaskQuantileALDLikelihood
 
 __all__ = [
     "MultitaskQuantileGPLikelihood",

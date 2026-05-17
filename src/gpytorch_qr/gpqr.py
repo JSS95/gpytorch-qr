@@ -65,7 +65,7 @@
 >>> plt.plot(x_pred, mean_q.T)  # doctest: +IGNORE_OUTPUT
 """
 
-from .ald import BatchQuantileALDLikelihood
+from .likelihoods import BatchQuantileALDLikelihood
 
 __all__ = [
     "BatchQuantileGPLikelihood",
