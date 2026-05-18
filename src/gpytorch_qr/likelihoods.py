@@ -535,7 +535,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
     >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
     >>> from gpytorch_qr.likelihoods import MultitaskCenterGapQuantileGPLikelihood
-    >>> from gpytorch_qr.variational import CenterGapLmcVariationalStrategy
+    >>> from gpytorch_qr.variational import CGBlkdiagLmcVariationalStrategy
     >>> class MyGP(CenterGapQuantileGP):
     ...     def __init__(
     ...         self,
@@ -550,7 +550,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
     ...             N,
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         variational_strategy = CenterGapLmcVariationalStrategy(
+    ...         variational_strategy = CGBlkdiagLmcVariationalStrategy(
     ...             VariationalStrategy(
     ...                 self,
     ...                 inducing_points,

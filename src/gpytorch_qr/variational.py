@@ -4,11 +4,11 @@ import gpytorch
 import torch
 
 __all__ = [
-    "CenterGapLmcVariationalStrategy",
+    "CGBlkdiagLmcVariationalStrategy",
 ]
 
 
-class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
+class CGBlkdiagLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     """LMC variational strategy for the center-gap quantile regression model.
 
     This class modifies the standard LMC coefficients to fit the center-gap
@@ -17,7 +17,7 @@ class CenterGapLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
     does not form any linear combinations with the other latent functions.
     The remaining latent functions are linearly combined to model the gap
     functions between quantiles. Upper and lower gap functions are modeled
-    separately.
+    separately by block diagonal matrices.
     """
 
     def __init__(

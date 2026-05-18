@@ -7,7 +7,7 @@ from gpytorch.variational import CholeskyVariationalDistribution, VariationalStr
 from gpytorch_qr.likelihoods import MultitaskCenterGapQuantileGPLikelihood
 from gpytorch_qr.means import CenterGapMean
 from gpytorch_qr.models import CenterGapQuantileGP
-from gpytorch_qr.variational import CenterGapLmcVariationalStrategy
+from gpytorch_qr.variational import CGBlkdiagLmcVariationalStrategy
 
 
 def test_mtgpqr_cg():
@@ -36,7 +36,7 @@ def test_mtgpqr_cg():
                 N,
                 batch_shape=torch.Size([num_latents]),
             )
-            variational_strategy = CenterGapLmcVariationalStrategy(
+            variational_strategy = CGBlkdiagLmcVariationalStrategy(
                 VariationalStrategy(
                     self,
                     inducing_points,
@@ -123,7 +123,7 @@ def test_mtgpqr_cg_multivariate():
                 N,
                 batch_shape=torch.Size([num_latents]),
             )
-            variational_strategy = CenterGapLmcVariationalStrategy(
+            variational_strategy = CGBlkdiagLmcVariationalStrategy(
                 VariationalStrategy(
                     self,
                     inducing_points,
