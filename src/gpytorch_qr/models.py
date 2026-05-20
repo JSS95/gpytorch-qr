@@ -119,6 +119,20 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
         raise NotImplementedError
 
     def mean_quantiles_mc(self, x, num_samples=10):
+        """Predict quantiles by Monte Carlo approximation of the posterior mean.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape ``(*B, N, D)``
+            The input locations.
+        num_samples : int, default=10
+            The number of Monte Carlo samples.
+
+        Returns
+        -------
+        quantiles : torch.Tensor
+            The predicted quantiles at the input locations.
+        """
         dist = self.joint_quantile_posterior(x)
         samples = dist.rsample(torch.Size([num_samples]))
         return samples.mean(dim=0)
@@ -141,6 +155,22 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
         raise NotImplementedError
 
     def quantile_quantiles_mc(self, x, q, num_samples=10):
+        """Quantile of quantile posterior by Monte Carlo approximation.
+
+        Parameters
+        ----------
+        x : torch.Tensor with shape ``(*B, N, D)``
+            The input locations.
+        q : torch.Tensor with shape (q,)
+            The quantile levels.
+        num_samples : int, default=10
+            The number of Monte Carlo samples.
+
+        Returns
+        -------
+        quantiles : torch.Tensor
+            The predicted quantiles at the input locations.
+        """
         dist = self.joint_quantile_posterior(x)
         samples = dist.rsample(torch.Size([num_samples]))
         return samples.quantile(q, dim=0)
