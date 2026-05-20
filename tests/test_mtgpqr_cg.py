@@ -86,6 +86,7 @@ def test_mtgpqr_cg():
     with torch.no_grad():
         gp.joint_quantile_posterior(x_pred)
         gp.mean_quantiles_mc(x_pred, num_samples=1)
+        gp.mean_quantiles_delta(x_pred)
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
         likelihood.predictive_posterior(gp(x_pred))
 
@@ -178,5 +179,6 @@ def test_mtgpqr_cg_multivariate():
     with torch.no_grad():
         gp.joint_quantile_posterior(x_pred)
         gp.mean_quantiles_mc(x_pred, num_samples=1)
+        gp.mean_quantiles_delta(x_pred)
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
         likelihood.predictive_posterior(gp(x_pred))

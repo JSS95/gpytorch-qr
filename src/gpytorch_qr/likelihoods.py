@@ -624,7 +624,9 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
         center = function_samples[..., :1]
         lower_gaps = function_samples[..., 1 : 1 + self.lower_count]
         upper_gaps = function_samples[..., 1 + self.lower_count :]
-        quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
+        quantiles = centergap_to_quantiles(
+            center, lower_gaps, upper_gaps, quantile_dim=-1
+        )
         return MultitaskQuantileALD(
             m=quantiles,
             lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
