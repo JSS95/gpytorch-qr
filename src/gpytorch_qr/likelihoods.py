@@ -364,8 +364,10 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
     q
         The quantile levels.
         Shape is ``(Q, *B)``.
-    central_quantile_index : int
+    central_quantile_index : torch.Tensor or scalar
         The index of the central quantile in the quantile levels.
+        If tensor, it should be broadcastable to the shape of ``(*B)`` so that
+        each batch can have different central quantile index.
     raw_scales
         The initial untransformed scales of the asymmetric Laplace distribution.
         Shape is either ``()`` or ``(Q, *B)``.
@@ -451,8 +453,13 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
         super().__init__(q, raw_scales, learn_scales)
-        central_quantile = self.q[central_quantile_index]
-        self.lower_count = (self.q < central_quantile).count_nonzero()
+        idx = torch.as_tensor(central_quantile_index).long()
+        if idx.dim() == 0:
+            idx_for_gather = idx.view(1).expand([1] + list(self.q.shape[1:]))
+        else:
+            idx_for_gather = idx.unsqueeze(0)  # (1, *B)
+        central_quantile = self.q.gather(0, idx_for_gather).squeeze(0)  # (*B)
+        self.lower_count = (self.q < central_quantile).sum(dim=0)  # (*B)
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
@@ -468,12 +475,40 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
         -------
         BatchQuantileALD
         """
-        center = function_samples[:, :1, ...]
-        lower_gaps = function_samples[:, 1 : 1 + self.lower_count, ...]
-        upper_gaps = function_samples[:, 1 + self.lower_count :, ...]
-        quantiles = centergap_to_quantiles(
-            center, lower_gaps, upper_gaps, quantile_dim=1
-        )
+        lc = self.lower_count
+        if lc.dim() == 0:
+            lc_int = int(lc)
+            center = function_samples[:, :1, ...]
+            lower_gaps = function_samples[:, 1 : 1 + lc_int, ...]
+            upper_gaps = function_samples[:, 1 + lc_int :, ...]
+            quantiles = centergap_to_quantiles(
+                center, lower_gaps, upper_gaps, quantile_dim=1
+            )
+        else:
+            # Derive actual batch shape from function_samples, not from lc,
+            # because lc may have been computed from a broadcasted q (e.g., (Q,1))
+            # while function_samples reflects the true batch (e.g., (S,Q,K,N)).
+            S, Q = function_samples.shape[:2]
+            N = function_samples.shape[-1]
+            B_shape = function_samples.shape[2:-1]  # actual (*B)
+            B_flat = 1
+            for d in B_shape:
+                B_flat *= d
+            # Flatten *B: (S, Q, B_flat, N)
+            fs_flat = function_samples.reshape(S, Q, B_flat, N)
+            lc_flat = lc.reshape(-1).expand(B_flat)  # broadcast lc to (B_flat,)
+            quantiles_flat = torch.empty_like(fs_flat)
+            for unique_lc in lc_flat.unique():
+                lc_val = int(unique_lc)
+                mask = lc_flat == unique_lc
+                fs_group = fs_flat[:, :, mask, :]  # (S, Q, G, N)
+                center = fs_group[:, :1, :, :]
+                lower_gaps = fs_group[:, 1 : 1 + lc_val, :, :]
+                upper_gaps = fs_group[:, 1 + lc_val :, :, :]
+                quantiles_flat[:, :, mask, :] = centergap_to_quantiles(
+                    center, lower_gaps, upper_gaps, quantile_dim=1
+                )
+            quantiles = quantiles_flat.reshape(S, Q, *B_shape, N)
         return BatchQuantileALD(
             m=quantiles,
             lamda=self.scales.unsqueeze(-1),  # (Q, *B, 1)
@@ -615,8 +650,15 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
         super().__init__(q, raw_scales, learn_scales)
-        central_quantile = self.q[..., central_quantile_index]
-        self.lower_count = (self.q < central_quantile).count_nonzero()
+        idx = torch.as_tensor(central_quantile_index).long()
+        if idx.dim() == 0:
+            idx_for_gather = idx.view(1).expand(
+                list(self.q.shape[:-1]) + [1]
+            )  # (*B, 1)
+        else:
+            idx_for_gather = idx.unsqueeze(-1)  # (*B, 1)
+        central_quantile = self.q.gather(-1, idx_for_gather).squeeze(-1)  # (*B)
+        self.lower_count = (self.q < central_quantile.unsqueeze(-1)).sum(dim=-1)  # (*B)
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
@@ -632,12 +674,40 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
         -------
         MultitaskQuantileALD
         """
-        center = function_samples[..., :1]
-        lower_gaps = function_samples[..., 1 : 1 + self.lower_count]
-        upper_gaps = function_samples[..., 1 + self.lower_count :]
-        quantiles = centergap_to_quantiles(
-            center, lower_gaps, upper_gaps, quantile_dim=-1
-        )
+        lc = self.lower_count
+        if lc.dim() == 0:
+            lc_int = int(lc)
+            center = function_samples[..., :1]
+            lower_gaps = function_samples[..., 1 : 1 + lc_int]
+            upper_gaps = function_samples[..., 1 + lc_int :]
+            quantiles = centergap_to_quantiles(
+                center, lower_gaps, upper_gaps, quantile_dim=-1
+            )
+        else:
+            # Derive actual batch shape from function_samples, not from lc,
+            # because lc may have been computed from a broadcasted q.
+            S = function_samples.shape[0]
+            N = function_samples.shape[-2]
+            Q = function_samples.shape[-1]
+            B_shape = function_samples.shape[1:-2]  # actual (*B)
+            B_flat = 1
+            for d in B_shape:
+                B_flat *= d
+            # Flatten *B: (S, B_flat, N, Q)
+            fs_flat = function_samples.reshape(S, B_flat, N, Q)
+            lc_flat = lc.reshape(-1).expand(B_flat)  # broadcast lc to (B_flat,)
+            quantiles_flat = torch.empty_like(fs_flat)
+            for unique_lc in lc_flat.unique():
+                lc_val = int(unique_lc)
+                mask = lc_flat == unique_lc
+                fs_group = fs_flat[:, mask, :, :]  # (S, G, N, Q)
+                center = fs_group[..., :1]
+                lower_gaps = fs_group[..., 1 : 1 + lc_val]
+                upper_gaps = fs_group[..., 1 + lc_val :]
+                quantiles_flat[:, mask, :, :] = centergap_to_quantiles(
+                    center, lower_gaps, upper_gaps, quantile_dim=-1
+                )
+            quantiles = quantiles_flat.reshape(S, *B_shape, N, Q)
         return MultitaskQuantileALD(
             m=quantiles,
             lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
