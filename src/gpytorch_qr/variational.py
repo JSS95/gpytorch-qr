@@ -12,6 +12,23 @@ __all__ = [
 class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     """LMC variational strategy for the center-gap quantile regression model.
 
+    This class allows all gaps to be correlated.
+
+    Parameters
+    ----------
+    base_variational_strategy : gpytorch.variational.VariationalStrategy
+        The base variational strategy to wrap.
+    num_quantiles : int
+        The number of quantiles.
+    num_latents : int
+        The number of latent functions.
+    latent_dim : int, optional
+        The dimension along which the latent functions are defined. Default is -1.
+    jitter_val : float, optional
+        The jitter value to add to the covariance matrix for numerical stability.
+
+    Notes
+    -----
     This class modifies the standard LMC coefficients to fit the center-gap
     representation.
     The first latent function directly represents the central quantile, and it
@@ -88,7 +105,19 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
 class CGBlkdiagLmcVariationalStrategy(CGLmcVariationalStrategy):
     """LMC variational strategy for the center-gap quantile regression model.
 
-    Upper and lower gap functions are modeled separately by block diagonal matrices.
+    This class does not allow correlations between upper and lower gap functions.
+
+    Parameters
+    ----------
+    base_variational_strategy
+    num_quantiles
+    num_latents
+    num_lower_quantiles : int
+        The number of lower quantiles.
+    num_lower_latents : int
+        The number of lower latent functions.
+    latent_dim
+    jitter_val
     """
 
     def __init__(
