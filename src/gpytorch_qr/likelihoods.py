@@ -32,12 +32,23 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
     Notes
     -----
-    When ``learn_scales=True``, broadcasted parameters in ``raw_scales`` are
-    updated from multiple channels.
-    It is usually recommended to use independent scale parameters for all channels.
+    Whether to let ``raw_scales`` be broadcasted is important when ``learn_scales=True``.
+    When the scale is broadcasted, the same scale parameter is shared across and updated
+    along the broadcasted dimension, e.g., across different quantile levels or batches.
 
-    If ``raw_scales`` is a scalar, e.g., ``Tensor(1)``, it is repeated to the shape
-    of *q* instead of being broadcasted.
+    Sharing scales across quantiles may be deliberately used to reduce the number of
+    parameters and increase the stability of training.
+    On the other hand, sharing scales across batches usually does not make sense and
+    should be avoided.
+    In general, it is recommended to use independent scale parameters for all channels.
+
+    To encourage the use of independent scale parameters, scalar ``raw_scales`` is
+    repeated to the shape of *q* instead of being broadcasted.
+    For example, if *q* has shape ``(Q, *B)`` and ``raw_scales`` is ``Tensor(1)``
+    whose shape is ``()``, then it is converted to a tensor of shape ``(Q, *B)``
+    where all values are 1.
+    On the other hand, if ``raw_scales`` is ``Tensor([[1]])`` whose shape is ``(1, 1)``,
+    then it is broadcasted to shape ``(Q, *B)`` and shared across quantiles and batches.
     """
 
     def __init__(self, q, raw_scales=0.0, learn_scales=True):
