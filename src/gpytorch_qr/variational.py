@@ -18,6 +18,10 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     does not form any linear combinations with the other latent functions.
     The remaining latent functions are linearly combined to model the gap
     functions between quantiles.
+
+    Subclass can extend :meth:`construct_lmc_mask` to further restrict the
+    linear combinations, e.g., to model upper and lower gap functions
+    separately by block diagonal matrices.
     """
 
     def __init__(
@@ -43,18 +47,38 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         g0_mask[..., 0, 0] = 1
         self.register_buffer("g0_mask", g0_mask)
 
-        self.register_buffer(
-            "lmc_mask", self.construct_lmc_mask(lmc_coefficients.shape)
+        lmc_mask = torch.zeros_like(lmc_coefficients)
+        lmc_mask[..., 1:, 1:] = self.construct_lmc_mask(
+            torch.Size(
+                list(lmc_coefficients.shape[:-2])
+                + [lmc_coefficients.shape[-2] - 1]
+                + [lmc_coefficients.shape[-1] - 1]
+            )
         )
+        self.register_buffer("lmc_mask", lmc_mask)
 
         self.register_parameter(
             "_lmc_coefficients", torch.nn.Parameter(lmc_coefficients)
         )
 
     def construct_lmc_mask(self, shape):
-        mask = torch.zeros(shape)
-        mask[..., 1:, 1:] = 1
-        return mask
+        """Construct a mask to restrict the LMC structure.
+
+        Parameters
+        ----------
+        shape : torch.Size
+            The shape of the LMC coefficients.
+            Must be ``([batch_shape], T - 1, Q - 1)``, where ``T`` is the
+            number of latent functions and ``Q`` is the number of quantiles.
+
+        Returns
+        -------
+        lmc_mask : torch.Tensor with shape ``shape``
+            A binary mask of the same shape as the LMC coefficients, where 1
+            indicates the positions of the LMC coefficients to be learned, and 0
+            indicates the positions of the LMC coefficients to be fixed at 0.
+        """
+        return torch.ones(shape)
 
     @property
     def lmc_coefficients(self):
@@ -95,8 +119,8 @@ class CGBlkdiagLmcVariationalStrategy(CGLmcVariationalStrategy):
 
     def construct_lmc_mask(self, shape):
         mask = super().construct_lmc_mask(shape)
-        mask[..., 1 : 1 + self.num_lower_latents, -self.num_upper_quantiles :] = 0
-        mask[..., -self.num_upper_latents :, 1 : 1 + self.num_lower_quantiles] = 0
+        mask[..., : self.num_lower_latents, -self.num_upper_quantiles :] = 0
+        mask[..., -self.num_upper_latents :, : self.num_lower_quantiles] = 0
         return mask
 
     @property
