@@ -169,3 +169,40 @@ def test_forward_ald_kappa_lamda_shapes_with_batch():
     out = lik.forward(fs)
     assert out.kappa.shape == torch.Size([1, Q, B, 1])
     assert out.lamda.shape == torch.Size([1, Q, B, 1])
+
+
+def test_forward_broadcast_q_with_larger_batch():
+    """q shape (Q, 1) but function_samples has actual batch K > 1.
+
+    This is the broadcast scenario from the cross-validation notebook:
+        likelihood = BatchCenterGapQuantileGPLikelihood(q.unsqueeze(1), idx, scales)
+    where scales has shape (Q, K), so function_samples has batch dim K.
+    The bug was that lc.shape == (1,) while function_samples.shape[2] == K,
+    causing reshape to fail. The fix derives B_shape from function_samples.
+    """
+    K = 5
+    # q is broadcast: shape (Q, 1) — same quantiles for all batches
+    q_broadcast = Q_LEVELS.unsqueeze(1)  # (Q, 1)
+    raw_scales = torch.zeros(Q, K)
+    lik = BatchCenterGapQuantileGPLikelihood(
+        q_broadcast, central_quantile_index=2, raw_scales=raw_scales
+    )
+    # lc was computed from q of shape (Q, 1) -> lower_count shape (1,)
+    assert lik.lower_count.shape == torch.Size([1])
+
+    torch.manual_seed(0)
+    fs = torch.randn(S, Q, K, N)  # actual batch K=5
+
+    # Should not raise RuntimeError
+    out = lik.forward(fs)
+
+    assert out.m.shape == torch.Size([S, Q, K, N])
+    # All batches use the same lc=2, so results must match manual reconstruction
+    lc = 2
+    expected = centergap_to_quantiles(
+        fs[:, :1, :, :],
+        fs[:, 1 : 1 + lc, :, :],
+        fs[:, 1 + lc :, :, :],
+        quantile_dim=1,
+    )
+    assert torch.allclose(out.m, expected)

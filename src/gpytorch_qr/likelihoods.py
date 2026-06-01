@@ -485,13 +485,18 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
                 center, lower_gaps, upper_gaps, quantile_dim=1
             )
         else:
-            B_shape = lc.shape  # (*B)
-            B_flat = lc.numel()
+            # Derive actual batch shape from function_samples, not from lc,
+            # because lc may have been computed from a broadcasted q (e.g., (Q,1))
+            # while function_samples reflects the true batch (e.g., (S,Q,K,N)).
             S, Q = function_samples.shape[:2]
             N = function_samples.shape[-1]
+            B_shape = function_samples.shape[2:-1]  # actual (*B)
+            B_flat = 1
+            for d in B_shape:
+                B_flat *= d
             # Flatten *B: (S, Q, B_flat, N)
             fs_flat = function_samples.reshape(S, Q, B_flat, N)
-            lc_flat = lc.reshape(-1)  # (B_flat,)
+            lc_flat = lc.reshape(-1).expand(B_flat)  # broadcast lc to (B_flat,)
             quantiles_flat = torch.empty_like(fs_flat)
             for unique_lc in lc_flat.unique():
                 lc_val = int(unique_lc)
