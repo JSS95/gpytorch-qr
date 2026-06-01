@@ -32,7 +32,7 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
     Notes
     -----
-    Whether to let ``raw_scales`` be broadcasted is important when ``learn_scales=True``.
+    Whether to broadcast ``raw_scales`` is important when ``learn_scales=True``.
     When the scale is broadcasted, the same scale parameter is shared across and updated
     along the broadcasted dimension, e.g., across different quantile levels or batches.
 
