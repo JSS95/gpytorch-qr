@@ -476,22 +476,34 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
         BatchQuantileALD
         """
         lc = self.lower_count
-        if lc.dim() > 0:
-            unique_lc = lc.unique()
-            if len(unique_lc) != 1:
-                raise ValueError(
-                    "All batches must have the same number of lower quantiles "
-                    f"for center-gap reconstruction, but found: {unique_lc.tolist()}"
-                )
-            lc = int(unique_lc.item())
+        if lc.dim() == 0:
+            lc_int = int(lc)
+            center = function_samples[:, :1, ...]
+            lower_gaps = function_samples[:, 1 : 1 + lc_int, ...]
+            upper_gaps = function_samples[:, 1 + lc_int :, ...]
+            quantiles = centergap_to_quantiles(
+                center, lower_gaps, upper_gaps, quantile_dim=1
+            )
         else:
-            lc = int(lc)
-        center = function_samples[:, :1, ...]
-        lower_gaps = function_samples[:, 1 : 1 + lc, ...]
-        upper_gaps = function_samples[:, 1 + lc :, ...]
-        quantiles = centergap_to_quantiles(
-            center, lower_gaps, upper_gaps, quantile_dim=1
-        )
+            B_shape = lc.shape  # (*B)
+            B_flat = lc.numel()
+            S, Q = function_samples.shape[:2]
+            N = function_samples.shape[-1]
+            # Flatten *B: (S, Q, B_flat, N)
+            fs_flat = function_samples.reshape(S, Q, B_flat, N)
+            lc_flat = lc.reshape(-1)  # (B_flat,)
+            quantiles_flat = torch.empty_like(fs_flat)
+            for unique_lc in lc_flat.unique():
+                lc_val = int(unique_lc)
+                mask = lc_flat == unique_lc
+                fs_group = fs_flat[:, :, mask, :]  # (S, Q, G, N)
+                center = fs_group[:, :1, :, :]
+                lower_gaps = fs_group[:, 1 : 1 + lc_val, :, :]
+                upper_gaps = fs_group[:, 1 + lc_val :, :, :]
+                quantiles_flat[:, :, mask, :] = centergap_to_quantiles(
+                    center, lower_gaps, upper_gaps, quantile_dim=1
+                )
+            quantiles = quantiles_flat.reshape(S, Q, *B_shape, N)
         return BatchQuantileALD(
             m=quantiles,
             lamda=self.scales.unsqueeze(-1),  # (Q, *B, 1)
