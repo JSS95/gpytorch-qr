@@ -458,6 +458,7 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
             idx_for_gather = idx.view(1).expand([1] + list(self.q.shape[1:]))
         else:
             idx_for_gather = idx.unsqueeze(0)  # (1, *B)
+        idx_for_gather = idx_for_gather.to(self.q.device)
         central_quantile = self.q.gather(0, idx_for_gather).squeeze(0)  # (*B)
         self.lower_count = (self.q < central_quantile).sum(dim=0)  # (*B)
 
@@ -657,6 +658,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
             )  # (*B, 1)
         else:
             idx_for_gather = idx.unsqueeze(-1)  # (*B, 1)
+        idx_for_gather = idx_for_gather.to(self.q.device)
         central_quantile = self.q.gather(-1, idx_for_gather).squeeze(-1)  # (*B)
         self.lower_count = (self.q < central_quantile.unsqueeze(-1)).sum(dim=-1)  # (*B)
 
