@@ -32,7 +32,7 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
     Notes
     -----
-    Whether to let ``raw_scales`` be broadcasted is important when ``learn_scales=True``.
+    Whether to broadcast ``raw_scales`` is important when ``learn_scales=True``.
     When the scale is broadcasted, the same scale parameter is shared across and updated
     along the broadcasted dimension, e.g., across different quantile levels or batches.
 
@@ -364,8 +364,10 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
     q
         The quantile levels.
         Shape is ``(Q, *B)``.
-    central_quantile_index : int
+    central_quantile_index : torch.Tensor or scalar
         The index of the central quantile in the quantile levels.
+        If tensor, it should be broadcastable to the shape of ``(*B)`` so that
+        each batch can have different central quantile index.
     raw_scales
         The initial untransformed scales of the asymmetric Laplace distribution.
         Shape is either ``()`` or ``(Q, *B)``.
@@ -451,8 +453,13 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
 
     def __init__(self, q, central_quantile_index, raw_scales=0.0, learn_scales=True):
         super().__init__(q, raw_scales, learn_scales)
-        central_quantile = self.q[central_quantile_index]
-        self.lower_count = (self.q < central_quantile).count_nonzero()
+        idx = torch.as_tensor(central_quantile_index).long()
+        if idx.dim() == 0:
+            idx_for_gather = idx.view(1).expand([1] + list(self.q.shape[1:]))
+        else:
+            idx_for_gather = idx.unsqueeze(0)  # (1, *B)
+        central_quantile = self.q.gather(0, idx_for_gather).squeeze(0)  # (*B)
+        self.lower_count = (self.q < central_quantile).sum(dim=0)  # (*B)
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
@@ -468,9 +475,20 @@ class BatchCenterGapQuantileGPLikelihood(ALDLikelihood):
         -------
         BatchQuantileALD
         """
+        lc = self.lower_count
+        if lc.dim() > 0:
+            unique_lc = lc.unique()
+            if len(unique_lc) != 1:
+                raise ValueError(
+                    "All batches must have the same number of lower quantiles "
+                    f"for center-gap reconstruction, but found: {unique_lc.tolist()}"
+                )
+            lc = int(unique_lc.item())
+        else:
+            lc = int(lc)
         center = function_samples[:, :1, ...]
-        lower_gaps = function_samples[:, 1 : 1 + self.lower_count, ...]
-        upper_gaps = function_samples[:, 1 + self.lower_count :, ...]
+        lower_gaps = function_samples[:, 1 : 1 + lc, ...]
+        upper_gaps = function_samples[:, 1 + lc :, ...]
         quantiles = centergap_to_quantiles(
             center, lower_gaps, upper_gaps, quantile_dim=1
         )
