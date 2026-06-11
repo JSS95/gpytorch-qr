@@ -15,7 +15,7 @@ The process is modeled by GPQR where
 2. All input points are used as inducing points, with unwhitened variational inference.
 
 Compare the following four notebooks to see the performance of each architecture.
-It can be observed that only the multitask correlated center-gap GPQR shows robust performance.
+It can be observed that only the center-gap GPQR with correlated gaps shows robust performance.
 
 .. toctree::
    :maxdepth: 1
@@ -23,13 +23,11 @@ It can be observed that only the multitask correlated center-gap GPQR shows robu
 
    mtgpqr_cg.ipynb
 
-Other GPQRs are uncessful.
-Independent GPQR is numerically unstable, and direct regression without center-gap representation leads to collapsing quantiles.
+Other GPQRs are unsuccessful.
+Independent GPs are numerically unstable, and direct representation leads to collapsing quantiles.
 
 .. toctree::
    :maxdepth: 1
    :caption: Unsuccessful architecture
 
-   gpqr.ipynb
-   gpqr_cg.ipynb
    mtgpqr.ipynb
