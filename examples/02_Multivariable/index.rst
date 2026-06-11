@@ -1,5 +1,7 @@
-Multivariate GPQR
-=================
+Multivariable GPQR
+==================
+
+:math:`y = f(X)` where the dimension of :math:`X` is greater than 1.
 
 .. toctree::
    :maxdepth: 1
