@@ -14,22 +14,21 @@ The process is modeled by GPQR where
 1. Prior means of quantiles are sinusoidal functions with different offsets.
 2. All input points are used as inducing points, with unwhitened variational inference.
 
-Compare the following four notebooks to see the performance of each architecture.
-It can be observed that only the multitask correlated center-gap GPQR shows robust performance.
+Compare the following notebooks to see the performance of each architecture.
+It can be observed that the model architecture significantly affects the performance of GPQR.
 
 .. toctree::
    :maxdepth: 1
    :caption: Successful architecture
 
    mtgpqr_cg.ipynb
-
-Other GPQRs are uncessful.
-Independent GPQR is numerically unstable, and direct regression without center-gap representation leads to collapsing quantiles.
+   mtgpqr_independent.ipynb
+   mtgpqr_cg_independent.ipynb
 
 .. toctree::
    :maxdepth: 1
    :caption: Unsuccessful architecture
 
-   gpqr.ipynb
-   gpqr_cg.ipynb
    mtgpqr.ipynb
+
+To identify the best architecture, you can perform cross validation as described in :ref:`cross_validation`.

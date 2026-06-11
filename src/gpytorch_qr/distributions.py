@@ -4,7 +4,6 @@ import torch
 
 __all__ = [
     "ALD",
-    "BatchQuantileALD",
     "MultitaskQuantileALD",
 ]
 
@@ -62,53 +61,6 @@ class ALD(torch.distributions.Distribution):
             self.m
             - self.lamda / self.kappa * torch.log((1 - value) / (1 - self.kappa)),
         )
-
-
-class BatchQuantileALD(ALD):
-    """Asymmetric Laplace distribution where quantiles are treated as batches.
-
-    Parameters
-    ----------
-    m : torch.Tensor with shape ``(S, Q, *B, N)``
-        The location parameters of the distribution.
-    lamda : torch.Tensor with shape ``(Q, *B, 1)``
-        The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape ``(Q, *B, 1)``
-        The quantile levels of the distribution.
-
-    Attributes
-    ----------
-    m : torch.Tensor with shape ``(S, Q, *B, N)``
-    lamda : torch.Tensor with shape ``(1, Q, *B, 1)``
-    kappa : torch.Tensor with shape ``(1, Q, *B, 1)``
-
-    Notes
-    -----
-    - ``S`` : the number of samples drawn from the posterior distribution.
-    - ``Q`` : the number of quantiles.
-    - ``B`` : additional batches.
-    - ``N`` : the number of data points.
-
-    The posterior distribution have batch shape ``(Q, *B)``.
-    """
-
-    def __init__(self, m, lamda, kappa):
-        super().__init__(m, lamda.unsqueeze(0), kappa.unsqueeze(0))
-
-    def log_prob(self, value):
-        """Log probability of the asymmetric Laplace distribution at the given value.
-
-        Parameters
-        ----------
-        value : torch.Tensor with shape ``(*B, N)``
-            Observed response variables at which to evaluate the log probability.
-
-        Returns
-        -------
-        logp : torch.Tensor with shape ``(S, Q, *B, N)``
-            The log probability at the given values for each quantile and sample.
-        """
-        return super().log_prob(value.reshape(1, 1, *value.shape))
 
 
 class MultitaskQuantileALD(ALD):

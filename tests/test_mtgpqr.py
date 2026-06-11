@@ -47,7 +47,7 @@ def test_mtgpqr():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(variational_strategy, mean_module, covar_module, -1)
+            super().__init__(variational_strategy, mean_module, covar_module)
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyGP(inducing_points, len(q), num_latents=7)
@@ -123,7 +123,7 @@ def test_mtgpqr_multivariate():
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
             )
-            super().__init__(variational_strategy, mean_module, covar_module, -1)
+            super().__init__(variational_strategy, mean_module, covar_module)
 
     g1, g2 = torch.meshgrid(
         torch.linspace(0, 1, 2),

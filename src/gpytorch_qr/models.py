@@ -22,9 +22,6 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
     variational_strategy : gpytorch.variational.VariationalStrategy
     mean_module : gpytorch.means.Mean
     covar_module : gpytorch.kernels.Kernel
-    latent_dim : {0, -1}
-        The dimension along which the latent GPs are represented in module batch shape.
-        ``0`` if quantiles are batches, ``-1`` if quantiles are multitasks.
 
     Notes
     -----
@@ -32,20 +29,8 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
     optional batch shapes (e.g., for cross validation), *N* is the number of data points
     and *D* is the number of input dimensions.
 
-    Quantiles can be either batch dimension or task dimension with shape *Q*.
-
-    .. rubric:: Batch quantiles
-
-    - ``variational_strategy`` must wrap a variational distribution with batch shape
-      ``(Q, *B)``.
-    - ``mean_module`` and ``covar_module`` must have batch shape ``(Q, *B)``.
-    - Posterior is :class:`gpytorch.distributions.MultivariateNormal`
-      with batch shape ``(Q, *B)`` and event shape ``(N,)``.
-    - MLL loss is a tensor of shape ``(Q, *B)``.
-
-    .. rubric:: Multitask quantiles
-
-    Quantiles are constructed by combination of *L* latent GPs.
+    Quantiles are task dimension with shape *Q*, constructed by combination of
+    *L* latent GPs.
 
     - ``variational_strategy`` must wrap a variational distribution with batch shape
       ``(*B, L)``.
@@ -55,20 +40,14 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
     - MLL loss is a tensor of shape ``(*B)``.
     """
 
-    def __init__(self, variational_strategy, mean_module, covar_module, latent_dim):
+    def __init__(self, variational_strategy, mean_module, covar_module):
         super().__init__(variational_strategy)
         self.mean_module = mean_module
         self.covar_module = covar_module
-        if latent_dim == 0:
-            self.unsqueeze_dim = 0
-        elif latent_dim == -1:
-            self.unsqueeze_dim = -3
-        else:
-            raise ValueError("latent_dim should be either 0 or -1.")
 
     def forward(self, x):
-        # x : (*B, N, D) -> (1, *B, N, D) or (*B, 1, N, D)
-        x = x.unsqueeze(self.unsqueeze_dim)
+        # x : (*B, N, D) -> (*B, 1, N, D)
+        x = x.unsqueeze(-3)
         mean = self.mean_module(x)
         covar = self.covar_module(x)
         return gpytorch.distributions.MultivariateNormal(mean, covar)
@@ -222,7 +201,6 @@ class CenterGapQuantileGP(QuantileGP):
     mean_module : gpytorch_qr.centergap.CenterGapMean
         Mean module for center-gap representation.
     covar_module
-    latent_dim
     num_lower_quantiles : int
         The number of lower quantiles in center-gap representation.
     """
@@ -232,10 +210,9 @@ class CenterGapQuantileGP(QuantileGP):
         variational_strategy,
         mean_module,
         covar_module,
-        latent_dim,
         num_lower_quantiles,
     ):
-        super().__init__(variational_strategy, mean_module, covar_module, latent_dim)
+        super().__init__(variational_strategy, mean_module, covar_module)
         self.num_lower_quantiles = num_lower_quantiles
 
     def joint_quantile_posterior(self, x):
