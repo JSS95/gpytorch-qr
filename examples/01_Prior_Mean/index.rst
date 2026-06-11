@@ -23,9 +23,12 @@ It can be observed that the model architecture significantly affects the perform
 
    mtgpqr_cg.ipynb
    mtgpqr_independent.ipynb
+   mtgpqr_cg_independent.ipynb
 
 .. toctree::
    :maxdepth: 1
    :caption: Unsuccessful architecture
 
    mtgpqr.ipynb
+
+To identify the best architecture, you can perform cross validation as described in :ref:`cross_validation`.
