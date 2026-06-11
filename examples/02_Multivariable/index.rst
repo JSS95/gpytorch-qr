@@ -7,7 +7,6 @@ Multivariable GPQR
    :maxdepth: 1
    :caption: Basic examples
 
-   gpqr.ipynb
    mtgpqr_cg.ipynb
 
 .. toctree::
