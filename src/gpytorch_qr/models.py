@@ -29,14 +29,14 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
     optional batch shapes (e.g., for cross validation), *N* is the number of data points
     and *D* is the number of input dimensions.
 
-    Quantiles are task dimension with shape *Q*, constructed by combination of
+    Quantiles are task dimension with shape *T*, constructed by combination of
     *L* latent GPs.
 
     - ``variational_strategy`` must wrap a variational distribution with batch shape
       ``(*B, L)``.
     - ``mean_module`` and ``covar_module`` must have batch shape ``(*B, L)``.
     - Posterior is :class:`gpytorch.distributions.MultitaskMultivariateNormal`
-      with batch shape ``(*B)`` and event shape ``(N, Q)``.
+      with batch shape ``(*B)`` and event shape ``(N, T)``.
     - MLL loss is a tensor of shape ``(*B)``.
     """
 

@@ -64,27 +64,27 @@ class ALD(torch.distributions.Distribution):
 
 
 class MultitaskQuantileALD(ALD):
-    """Asymmetric Laplace distribution where quantiles are treated as tasks.
+    """Asymmetric Laplace distribution with multiple tasks.
 
     Parameters
     ----------
-    m : torch.Tensor with shape ``(S, *B, N, Q)``
+    m : torch.Tensor with shape ``(S, *B, N, T)``
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape ``(*B, 1, Q)``
+    lamda : torch.Tensor with shape ``(*B, 1, T)``
         The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape ``(*B, 1, Q)``
+    kappa : torch.Tensor with shape ``(*B, 1, T)``
         The quantile levels of the distribution.
 
     Attributes
     ----------
-    m : torch.Tensor with shape ``(S, *B, N, Q)``
-    lamda : torch.Tensor with shape ``(1, *B, 1, Q)``
-    kappa : torch.Tensor with shape ``(1, *B, 1, Q)``
+    m : torch.Tensor with shape ``(S, *B, N, T)``
+    lamda : torch.Tensor with shape ``(1, *B, 1, T)``
+    kappa : torch.Tensor with shape ``(1, *B, 1, T)``
 
     Notes
     -----
     - ``S`` : the number of samples drawn from the posterior distribution.
-    - ``Q`` : the number of quantiles.
+    - ``T`` : the number of tasks.
     - ``B`` : additional batches.
     - ``N`` : the number of data points.
 
@@ -104,7 +104,7 @@ class MultitaskQuantileALD(ALD):
 
         Returns
         -------
-        logp : torch.Tensor with shape ``(S, *B, N, Q)``
-            The log probability at the given values for each quantile and sample.
+        logp : torch.Tensor with shape ``(S, *B, N, T)``
+            The log probability at the given values for each task and sample.
         """
         return super().log_prob(value.reshape(1, *value.shape, 1))

@@ -42,11 +42,11 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
     To encourage the use of independent scale parameters, scalar ``raw_scales`` is
     repeated to the shape of *q* instead of being broadcasted.
-    For example, if *q* has shape ``(*B, Q)`` and ``raw_scales`` is ``Tensor(1)``
-    whose shape is ``()``, then it is converted to a tensor of shape ``(*B, Q)``
+    For example, if *q* has shape ``(*B, T)`` and ``raw_scales`` is ``Tensor(1)``
+    whose shape is ``()``, then it is converted to a tensor of shape ``(*B, T)``
     where all values are 1.
     On the other hand, if ``raw_scales`` is ``Tensor([[1]])`` whose shape is ``(1, 1)``,
-    then it is broadcasted to shape ``(*B, Q)`` and shared across quantiles and batches.
+    then it is broadcasted to shape ``(*B, T)`` and shared across tasks and batches.
     """
 
     def __init__(self, q, raw_scales=0.0, learn_scales=True):
@@ -99,23 +99,23 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 class MultitaskQuantileGPLikelihood(ALDLikelihood):
     """Likelihood for :class:`MultitaskQuantileALD` with direct representation.
 
-    It is recommended to use fewer latent GPs than the number of tasks(=quantiles)
+    It is recommended to use fewer latent GPs than the number of tasks
     to model the correlation structure.
 
     Parameters
     ----------
     q
         The quantile levels.
-        Shape is ``(*B, Q)``.
+        Shape is ``(*B, T)``.
     raw_scales
         The initial untransformed scales of the asymmetric Laplace distribution.
-        Shape is either ``()`` or ``(*B, Q)``.
+        Shape is either ``()`` or ``(*B, T)``.
     learn_scales
 
     Attributes
     ----------
-    q : torch.Tensor with shape ``(*B, Q)``
-    raw_scales : torch.Tensor with shape ``(*B, Q)``
+    q : torch.Tensor with shape ``(*B, T)``
+    raw_scales : torch.Tensor with shape ``(*B, T)``
 
     Example
     -------
@@ -194,9 +194,9 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
+        function_samples : torch.Tensor with shape ``(S, *B, N, T)``
             The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            functions. *S* is the number of samples, *T* is the number of tasks,
             *B* is the batch shape, and *N* is the number of data points.
 
         Returns
@@ -205,8 +205,8 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
         """
         return MultitaskQuantileALD(
             m=function_samples,
-            lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
-            kappa=self.q.unsqueeze(-2),  # (*B, 1, Q)
+            lamda=self.scales.unsqueeze(-2),  # (*B, 1, T)
+            kappa=self.q.unsqueeze(-2),  # (*B, 1, T)
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
@@ -221,10 +221,10 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
 
         Returns
         -------
-        torch.Tensor with shape ``(*B, Q)``
+        torch.Tensor with shape ``(*B, T)``
             The expected log probability of the observed data under the ALD likelihood.
         """
-        # lp: (*B, N, Q)
+        # lp: (*B, N, T)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=-2)
 
@@ -234,25 +234,25 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
 
     Latent GPs model the central quantile and the gaps between quantiles separately.
 
-    It is recommended to use fewer latent GPs than the number of tasks(=quantiles)
+    It is recommended to use fewer latent GPs than the number of tasks
     to model the correlation structure.
 
     Parameters
     ----------
     q
         The quantile levels.
-        Shape is ``(*B, Q)``.
+        Shape is ``(*B, T)``.
     central_quantile_index : int
         The index of the central quantile in the quantile levels.
     raw_scales
         The initial untransformed scales of the asymmetric Laplace distribution.
-        Shape is either ``()`` or ``(*B, Q)``.
+        Shape is either ``()`` or ``(*B, T)``.
     learn_scales
 
     Attributes
     ----------
-    q : torch.Tensor with shape ``(*B, Q)``
-    raw_scales : torch.Tensor with shape ``(*B, Q)``
+    q : torch.Tensor with shape ``(*B, T)``
+    raw_scales : torch.Tensor with shape ``(*B, T)``
 
     Examples
     --------
@@ -359,9 +359,9 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
+        function_samples : torch.Tensor with shape ``(S, *B, N, T)``
             The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of quantiles,
+            functions. *S* is the number of samples, *T* is the number of tasks,
             *B* is the batch shape, and *N* is the number of data points.
 
         Returns
@@ -382,30 +382,30 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
             # because lc may have been computed from a broadcasted q.
             S = function_samples.shape[0]
             N = function_samples.shape[-2]
-            Q = function_samples.shape[-1]
+            T = function_samples.shape[-1]
             B_shape = function_samples.shape[1:-2]  # actual (*B)
             B_flat = 1
             for d in B_shape:
                 B_flat *= d
-            # Flatten *B: (S, B_flat, N, Q)
-            fs_flat = function_samples.reshape(S, B_flat, N, Q)
+            # Flatten *B: (S, B_flat, N, T)
+            fs_flat = function_samples.reshape(S, B_flat, N, T)
             lc_flat = lc.reshape(-1).expand(B_flat)  # broadcast lc to (B_flat,)
             quantiles_flat = torch.empty_like(fs_flat)
             for unique_lc in lc_flat.unique():
                 lc_val = int(unique_lc)
                 mask = lc_flat == unique_lc
-                fs_group = fs_flat[:, mask, :, :]  # (S, G, N, Q)
+                fs_group = fs_flat[:, mask, :, :]  # (S, G, N, T)
                 center = fs_group[..., :1]
                 lower_gaps = fs_group[..., 1 : 1 + lc_val]
                 upper_gaps = fs_group[..., 1 + lc_val :]
                 quantiles_flat[:, mask, :, :] = centergap_to_quantiles(
                     center, lower_gaps, upper_gaps, quantile_dim=-1
                 )
-            quantiles = quantiles_flat.reshape(S, *B_shape, N, Q)
+            quantiles = quantiles_flat.reshape(S, *B_shape, N, T)
         return MultitaskQuantileALD(
             m=quantiles,
-            lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
-            kappa=self.q.unsqueeze(-2),  # (*B, 1, Q)
+            lamda=self.scales.unsqueeze(-2),  # (*B, 1, T)
+            kappa=self.q.unsqueeze(-2),  # (*B, 1, T)
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
@@ -420,9 +420,9 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
 
         Returns
         -------
-        torch.Tensor with shape ``(*B, Q)``
+        torch.Tensor with shape ``(*B, T)``
             The expected log probability of the observed data under the ALD likelihood.
         """
-        # lp: (*B, N, Q)
+        # lp: (*B, N, T)
         lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
         return lp.sum(dim=-2)
