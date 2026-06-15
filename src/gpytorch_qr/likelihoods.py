@@ -18,9 +18,9 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
     Parameters
     ----------
-    kappa : torch.Tensor with shape (*B)
+    kappa : torch.Tensor with shape ``(*B)``
         The asymmetry parameters of the distribution.
-    raw_scales : torch.Tensor with shape (*B) or scalar, default=0
+    raw_scales : torch.Tensor with shape ``(*B)`` or scalar, default=0
         The initial untransformed scales of the asymmetric Laplace distribution.
         The actual scales are obtained by applying the positive transformation.
         If tensor, dimension should be same to *kappa* and shape should be
@@ -90,6 +90,29 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
             kappa=self.kappa,  # (*B)
         )
 
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N, *T)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            The distribution of the function values at the input locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        # lp: (*B, N, *T)
+        res = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+
+        num_event_dim = len(function_dist.event_shape)
+        if num_event_dim > 1:
+            res = res.sum(list(range(-1, -num_event_dim, -1)))
+        return res
+
     def predictive_posterior(self, gp_posterior):
         """Predictive posterior distribution of function values.
 
@@ -127,9 +150,9 @@ class DirectQuantileLikelihood(ALDLikelihood):
 
     Parameters
     ----------
-    kappa : torch.Tensor with shape (*B, Q)
+    kappa : torch.Tensor with shape ``(*B, Q)``
         The quantile levels.
-    raw_scales : torch.Tensor with shape (*B, Q) or scalar, default=0
+    raw_scales : torch.Tensor with shape ``(*B, Q)`` or scalar, default=0
         The initial untransformed scales of the asymmetric Laplace distribution.
     learn_scales
 
@@ -230,25 +253,6 @@ class DirectQuantileLikelihood(ALDLikelihood):
             kappa=self.kappa.unsqueeze(-2),  # (*B, 1, Q)
         )
 
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        """Expected log probability of the observed data under the ALD likelihood.
-
-        Parameters
-        ----------
-        observations : torch.Tensor with shape ``(*B, N)``
-            The observed response variables.
-        function_dist : torch.distributions.Distribution
-            The distribution of the function values at the input locations.
-
-        Returns
-        -------
-        torch.Tensor with shape ``(*B, Q)``
-            The expected log probability of the observed data under the ALD likelihood.
-        """
-        # lp: (*B, N, Q)
-        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=-2)
-
 
 class CenterGapQuantileLikelihood(ALDLikelihood):
     """Likelihood for :class:`QuantileALD` with center-gap representation.
@@ -258,11 +262,11 @@ class CenterGapQuantileLikelihood(ALDLikelihood):
 
     Parameters
     ----------
-    kappa : torch.Tensor with shape (*B, Q)
+    kappa : torch.Tensor with shape ``(*B, Q)``
         The quantile levels.
     central_quantile_index : int
         The index of the central quantile in the quantile levels.
-    raw_scales : torch.Tensor with shape (*B, Q) or scalar, default=0
+    raw_scales : torch.Tensor with shape ``(*B, Q)`` or scalar, default=0
         The initial untransformed scales of the asymmetric Laplace distribution.
     learn_scales
 
@@ -428,22 +432,3 @@ class CenterGapQuantileLikelihood(ALDLikelihood):
             lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
             kappa=self.kappa.unsqueeze(-2),  # (*B, 1, Q)
         )
-
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        """Expected log probability of the observed data under the ALD likelihood.
-
-        Parameters
-        ----------
-        observations : torch.Tensor with shape ``(*B, N)``
-            The observed response variables.
-        function_dist : torch.distributions.Distribution
-            The distribution of the function values at the input locations.
-
-        Returns
-        -------
-        torch.Tensor with shape ``(*B, Q)``
-            The expected log probability of the observed data under the ALD likelihood.
-        """
-        # lp: (*B, N, Q)
-        lp = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return lp.sum(dim=-2)
