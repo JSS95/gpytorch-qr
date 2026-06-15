@@ -3,7 +3,7 @@
 import gpytorch
 import torch
 
-from .distributions import MultitaskQuantileALD
+from .distributions import QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
@@ -97,7 +97,7 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
 
 
 class MultitaskQuantileGPLikelihood(ALDLikelihood):
-    """Likelihood for :class:`MultitaskQuantileALD` with direct representation.
+    """Likelihood for :class:`QuantileALD` with direct representation.
 
     It is recommended to use fewer latent GPs than the number of tasks
     to model the correlation structure.
@@ -201,9 +201,9 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
 
         Returns
         -------
-        MultitaskQuantileALD
+        QuantileALD
         """
-        return MultitaskQuantileALD(
+        return QuantileALD(
             m=function_samples,
             lamda=self.scales.unsqueeze(-2),  # (*B, 1, T)
             kappa=self.q.unsqueeze(-2),  # (*B, 1, T)
@@ -230,7 +230,7 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
 
 
 class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
-    """Likelihood for :class:`MultitaskQuantileALD` with center-gap representation.
+    """Likelihood for :class:`QuantileALD` with center-gap representation.
 
     Latent GPs model the central quantile and the gaps between quantiles separately.
 
@@ -366,7 +366,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
 
         Returns
         -------
-        MultitaskQuantileALD
+        QuantileALD
         """
         lc = self.lower_count
         if lc.dim() == 0:
@@ -402,7 +402,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
                     center, lower_gaps, upper_gaps, quantile_dim=-1
                 )
             quantiles = quantiles_flat.reshape(S, *B_shape, N, T)
-        return MultitaskQuantileALD(
+        return QuantileALD(
             m=quantiles,
             lamda=self.scales.unsqueeze(-2),  # (*B, 1, T)
             kappa=self.q.unsqueeze(-2),  # (*B, 1, T)

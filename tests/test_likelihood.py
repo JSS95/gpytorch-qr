@@ -1,6 +1,6 @@
 import torch
 
-from gpytorch_qr.distributions import MultitaskQuantileALD
+from gpytorch_qr.distributions import QuantileALD
 from gpytorch_qr.likelihoods import MultitaskCenterGapQuantileGPLikelihood
 from gpytorch_qr.utils import centergap_to_quantiles
 
@@ -52,7 +52,7 @@ def test_mt_forward_no_batch_output_type_and_shape():
     lik = MultitaskCenterGapQuantileGPLikelihood(MT_Q, central_quantile_index=2)
     fs = torch.randn(S, N, Q)
     out = lik.forward(fs)
-    assert isinstance(out, MultitaskQuantileALD)
+    assert isinstance(out, QuantileALD)
     assert out.m.shape == torch.Size([S, N, Q])
 
 
@@ -62,7 +62,7 @@ def test_mt_forward_with_batch_output_type_and_shape():
     lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=2)
     fs = torch.randn(S, B, N, Q)
     out = lik.forward(fs)
-    assert isinstance(out, MultitaskQuantileALD)
+    assert isinstance(out, QuantileALD)
     assert out.m.shape == torch.Size([S, B, N, Q])
 
 

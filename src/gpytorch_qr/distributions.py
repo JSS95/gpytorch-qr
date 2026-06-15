@@ -4,7 +4,7 @@ import torch
 
 __all__ = [
     "ALD",
-    "MultitaskQuantileALD",
+    "QuantileALD",
 ]
 
 
@@ -63,32 +63,39 @@ class ALD(torch.distributions.Distribution):
         )
 
 
-class MultitaskQuantileALD(ALD):
-    """Asymmetric Laplace distribution with multiple tasks.
+class QuantileALD(ALD):
+    """Asymmetric Laplace distribution for multiple quantiles.
 
     Parameters
     ----------
-    m : torch.Tensor with shape ``(S, *B, N, T)``
+    m : torch.Tensor with shape ``(S, *B, N, Q)``
         The location parameters of the distribution.
-    lamda : torch.Tensor with shape ``(*B, 1, T)``
+    lamda : torch.Tensor with shape ``(*B, 1, Q)``
         The scale parameters of the distribution for each quantile.
-    kappa : torch.Tensor with shape ``(*B, 1, T)``
+    kappa : torch.Tensor with shape ``(*B, 1, Q)``
         The quantile levels of the distribution.
 
     Attributes
     ----------
-    m : torch.Tensor with shape ``(S, *B, N, T)``
-    lamda : torch.Tensor with shape ``(1, *B, 1, T)``
-    kappa : torch.Tensor with shape ``(1, *B, 1, T)``
+    m : torch.Tensor with shape ``(S, *B, N, Q)``
+    lamda : torch.Tensor with shape ``(1, *B, 1, Q)``
+    kappa : torch.Tensor with shape ``(1, *B, 1, Q)``
 
     Notes
     -----
+    This class is designed for univariate Bayesian quantile regression
+    with multiple quantiles, i.e., ``y`` is a vector of univariate response
+    from which multiple quantiles are estimated.
+
     - ``S`` : the number of samples drawn from the posterior distribution.
-    - ``T`` : the number of tasks.
+    - ``Q`` : the number of quantiles.
     - ``B`` : additional batches.
     - ``N`` : the number of data points.
 
-    The posterior distribution have batch shape ``(*B)``.
+    Although the response is univariate, the distribution is multitask where
+    each task corresponds to a different quantile.
+    Multivariate regression with multiple quantiles can be achieved by
+    defining a likelihood class that uses multiple instances of this distribution.
     """
 
     def __init__(self, m, lamda, kappa):
@@ -104,7 +111,7 @@ class MultitaskQuantileALD(ALD):
 
         Returns
         -------
-        logp : torch.Tensor with shape ``(S, *B, N, T)``
+        logp : torch.Tensor with shape ``(S, *B, N, Q)``
             The log probability at the given values for each task and sample.
         """
         return super().log_prob(value.reshape(1, *value.shape, 1))
