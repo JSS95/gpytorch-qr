@@ -8,7 +8,7 @@ from .utils import centergap_to_quantiles
 
 __all__ = [
     "ALDLikelihood",
-    "MultitaskQuantileGPLikelihood",
+    "DirectQuantileLikelihood",
     "MultitaskCenterGapQuantileGPLikelihood",
 ]
 
@@ -96,7 +96,7 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
         return ald.icdf(u)
 
 
-class MultitaskQuantileGPLikelihood(ALDLikelihood):
+class DirectQuantileLikelihood(ALDLikelihood):
     """Likelihood for :class:`QuantileALD` with direct representation.
 
     It is recommended to use fewer latent GPs than the number of tasks
@@ -136,7 +136,7 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
     >>> from gpytorch.means import ConstantMean
     >>> from gpytorch.kernels import RBFKernel, ScaleKernel
     >>> from gpytorch_qr.models import DirectQuantileGP
-    >>> from gpytorch_qr.likelihoods import MultitaskQuantileGPLikelihood
+    >>> from gpytorch_qr.likelihoods import DirectQuantileLikelihood
     >>> class MyGP(DirectQuantileGP):
     ...     def __init__(self, inducing_points, num_latents, num_quantiles):
     ...         N, D = inducing_points.size()
@@ -163,7 +163,7 @@ class MultitaskQuantileGPLikelihood(ALDLikelihood):
     >>> inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     >>> num_latents = len(q) - 2  # recommended to be smaller than q
     >>> gp = MyGP(inducing_points, num_latents, len(q))
-    >>> likelihood = MultitaskQuantileGPLikelihood(q)
+    >>> likelihood = DirectQuantileLikelihood(q)
     >>> from gpytorch.mlls import VariationalELBO
     >>> gp.train()  # doctest: +IGNORE_OUTPUT
     >>> likelihood.train()  # doctest: +IGNORE_OUTPUT
