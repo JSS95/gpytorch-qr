@@ -9,7 +9,7 @@ from .utils import centergap_to_quantiles
 __all__ = [
     "ALDLikelihood",
     "DirectQuantileLikelihood",
-    "MultitaskCenterGapQuantileGPLikelihood",
+    "CenterGapQuantileLikelihood",
 ]
 
 
@@ -229,7 +229,7 @@ class DirectQuantileLikelihood(ALDLikelihood):
         return lp.sum(dim=-2)
 
 
-class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
+class CenterGapQuantileLikelihood(ALDLikelihood):
     """Likelihood for :class:`QuantileALD` with center-gap representation.
 
     Latent GPs model the central quantile and the gaps between quantiles separately.
@@ -274,7 +274,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
     >>> from gpytorch.kernels import RBFKernel, ScaleKernel
     >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
-    >>> from gpytorch_qr.likelihoods import MultitaskCenterGapQuantileGPLikelihood
+    >>> from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
     >>> from gpytorch_qr.variational import CGBlkdiagLmcVariationalStrategy
     >>> class MyGP(CenterGapQuantileGP):
     ...     def __init__(
@@ -315,7 +315,7 @@ class MultitaskCenterGapQuantileGPLikelihood(ALDLikelihood):
     >>> central_q_index = (q - 0.5).abs().argmin().item()
     >>> num_latents = len(q) - 2  # recommended to be smaller than q
     >>> gp = MyGP(inducing_pts, len(q), central_q_index, num_latents, num_latents // 2)
-    >>> likelihood = MultitaskCenterGapQuantileGPLikelihood(q, central_q_index)
+    >>> likelihood = CenterGapQuantileLikelihood(q, central_q_index)
     >>> from gpytorch.mlls import VariationalELBO
     >>> gp.train()  # doctest: +IGNORE_OUTPUT
     >>> likelihood.train()  # doctest: +IGNORE_OUTPUT

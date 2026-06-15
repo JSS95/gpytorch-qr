@@ -1,7 +1,7 @@
 import torch
 
 from gpytorch_qr.distributions import QuantileALD
-from gpytorch_qr.likelihoods import MultitaskCenterGapQuantileGPLikelihood
+from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
 from gpytorch_qr.utils import centergap_to_quantiles
 
 Q = 5
@@ -14,21 +14,21 @@ MT_Q = Q_LEVELS  # (Q,) — no batch
 
 
 def test_mt_lower_count_scalar_index_no_batch():
-    lik = MultitaskCenterGapQuantileGPLikelihood(MT_Q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(MT_Q, central_quantile_index=2)
     assert lik.lower_count.dim() == 0
     assert lik.lower_count.item() == 2
 
 
 def test_mt_lower_count_tensor_index_no_batch():
     idx = torch.tensor(2)
-    lik = MultitaskCenterGapQuantileGPLikelihood(MT_Q, central_quantile_index=idx)
+    lik = CenterGapQuantileLikelihood(MT_Q, central_quantile_index=idx)
     assert lik.lower_count.dim() == 0
     assert lik.lower_count.item() == 2
 
 
 def test_mt_lower_count_scalar_index_with_batch():
     q = Q_LEVELS.unsqueeze(0).expand(3, Q).contiguous()  # (3, Q)
-    lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(q, central_quantile_index=2)
     assert lik.lower_count.shape == torch.Size([3])
     assert (lik.lower_count == 2).all()
 
@@ -44,12 +44,12 @@ def test_mt_lower_count_tensor_index_varying():
         dim=0,
     )  # (2, Q)
     idx = torch.tensor([2, 3])
-    lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=idx)
+    lik = CenterGapQuantileLikelihood(q, central_quantile_index=idx)
     assert lik.lower_count.tolist() == [2, 3]
 
 
 def test_mt_forward_no_batch_output_type_and_shape():
-    lik = MultitaskCenterGapQuantileGPLikelihood(MT_Q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(MT_Q, central_quantile_index=2)
     fs = torch.randn(S, N, Q)
     out = lik.forward(fs)
     assert isinstance(out, QuantileALD)
@@ -59,7 +59,7 @@ def test_mt_forward_no_batch_output_type_and_shape():
 def test_mt_forward_with_batch_output_type_and_shape():
     B = 3
     q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()  # (B, Q)
-    lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(q, central_quantile_index=2)
     fs = torch.randn(S, B, N, Q)
     out = lik.forward(fs)
     assert isinstance(out, QuantileALD)
@@ -68,7 +68,7 @@ def test_mt_forward_with_batch_output_type_and_shape():
 
 def test_mt_forward_reconstruction_no_batch():
     lc = 2
-    lik = MultitaskCenterGapQuantileGPLikelihood(MT_Q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(MT_Q, central_quantile_index=2)
     torch.manual_seed(0)
     fs = torch.randn(S, N, Q)
 
@@ -86,7 +86,7 @@ def test_mt_forward_reconstruction_no_batch():
 def test_mt_forward_reconstruction_uniform_batch():
     B, lc = 3, 2
     q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()  # (B, Q)
-    lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(q, central_quantile_index=2)
     torch.manual_seed(0)
     fs = torch.randn(S, B, N, Q)
 
@@ -111,7 +111,7 @@ def test_mt_forward_reconstruction_varying_lower_count():
         dim=0,
     )  # (2, Q): lower_counts [2, 3]
     idx = torch.tensor([2, 3])
-    lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=idx)
+    lik = CenterGapQuantileLikelihood(q, central_quantile_index=idx)
 
     torch.manual_seed(0)
     fs = torch.randn(S, 2, N, Q)
@@ -144,7 +144,7 @@ def test_mt_forward_broadcast_q_with_larger_batch():
     K = 5
     q_broadcast = Q_LEVELS.unsqueeze(0)  # (1, Q)
     raw_scales = torch.zeros(K, Q)
-    lik = MultitaskCenterGapQuantileGPLikelihood(
+    lik = CenterGapQuantileLikelihood(
         q_broadcast, central_quantile_index=2, raw_scales=raw_scales
     )
     assert lik.lower_count.shape == torch.Size([1])
@@ -166,7 +166,7 @@ def test_mt_forward_broadcast_q_with_larger_batch():
 
 
 def test_mt_forward_ald_kappa_lamda_shapes_no_batch():
-    lik = MultitaskCenterGapQuantileGPLikelihood(MT_Q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(MT_Q, central_quantile_index=2)
     fs = torch.randn(S, N, Q)
     out = lik.forward(fs)
     assert out.kappa.shape == torch.Size([1, 1, Q])
@@ -176,7 +176,7 @@ def test_mt_forward_ald_kappa_lamda_shapes_no_batch():
 def test_mt_forward_ald_kappa_lamda_shapes_with_batch():
     B = 3
     q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()
-    lik = MultitaskCenterGapQuantileGPLikelihood(q, central_quantile_index=2)
+    lik = CenterGapQuantileLikelihood(q, central_quantile_index=2)
     fs = torch.randn(S, B, N, Q)
     out = lik.forward(fs)
     assert out.kappa.shape == torch.Size([1, B, 1, Q])
