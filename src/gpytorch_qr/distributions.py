@@ -1,4 +1,4 @@
-"""Asymmetric Laplace distributions for quantile regression."""
+"""Asymmetric Laplace distributions for Bayesian quantile regression."""
 
 import torch
 
@@ -18,7 +18,7 @@ class ALD(torch.distributions.Distribution):
     lamda : torch.Tensor
         The scale parameter of the distribution.
     kappa : torch.Tensor
-        The quantile level of the distribution.
+        The asymmetry parameter of the distribution.
 
     Attributes
     ----------
