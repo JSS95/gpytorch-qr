@@ -1,5 +1,5 @@
-Multivariable GPQR
-==================
+Multi-input GPQR
+================
 
 :math:`y = f(X)` where the dimension of :math:`X` is greater than 1.
 
