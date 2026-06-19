@@ -105,7 +105,6 @@ def test_mt_forward_reconstruction_no_batch():
         fs[..., :1],
         fs[..., 1 : 1 + lc],
         fs[..., 1 + lc :],
-        quantile_dim=-1,
     )
     assert torch.allclose(out.m, expected, atol=1e-5)
 
@@ -124,7 +123,6 @@ def test_mt_forward_reconstruction_uniform_batch():
             fs[:, b : b + 1, :, :1],
             fs[:, b : b + 1, :, 1 : 1 + lc],
             fs[:, b : b + 1, :, 1 + lc :],
-            quantile_dim=-1,
         ).squeeze(1)
         assert torch.allclose(out.m[:, b, :, :], expected_b, atol=1e-5)
 
@@ -151,7 +149,6 @@ def test_mt_forward_reconstruction_varying_lower_count():
         fs[:, 0:1, :, :1],
         fs[:, 0:1, :, 1 : 1 + lc0],
         fs[:, 0:1, :, 1 + lc0 :],
-        quantile_dim=-1,
     ).squeeze(1)
     assert torch.allclose(out.m[:, 0, :, :], expected0, atol=1e-5)
 
@@ -161,7 +158,6 @@ def test_mt_forward_reconstruction_varying_lower_count():
         fs[:, 1:2, :, :1],
         fs[:, 1:2, :, 1 : 1 + lc1],
         fs[:, 1:2, :, 1 + lc1 :],
-        quantile_dim=-1,
     ).squeeze(1)
     assert torch.allclose(out.m[:, 1, :, :], expected1, atol=1e-5)
 
@@ -187,7 +183,6 @@ def test_mt_forward_broadcast_q_with_larger_batch():
         fs[..., :1],
         fs[..., 1 : 1 + lc],
         fs[..., 1 + lc :],
-        quantile_dim=-1,
     )
     assert torch.allclose(out.m, expected, atol=1e-5)
 

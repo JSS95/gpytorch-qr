@@ -1,6 +1,5 @@
 """Utility functions."""
 
-import gpytorch
 import torch
 import torch.nn.functional as F
 
@@ -11,26 +10,25 @@ __all__ = [
 ]
 
 
-def centergap_to_quantiles(central, lower_gaps, upper_gaps, quantile_dim=-1):
+def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     """Convert center-gap representation samples to quantiles.
 
     Parameters
     ----------
-    central : torch.Tensor with shape (..., 1, ...)
+    central : torch.Tensor with shape (..., 1)
         The central quantile values.
-    lower_gaps : torch.Tensor with shape (..., L, ...)
+    lower_gaps : torch.Tensor with shape (..., L)
         Pre-transformed lower gap values.
-    upper_gaps : torch.Tensor with shape (..., U, ...)
+    upper_gaps : torch.Tensor with shape (..., U)
         Pre-transformed upper gap values.
-    quantile_dim : int, default=-1
-        The dimension along which the quantiles are represented.
 
     Returns
     -------
-    quantiles : torch.Tensor with shape (..., Q, ...)
+    quantiles : torch.Tensor with shape (..., Q)
         Quantile values. (Q = L + U + 1 at *quantile_dim*)
         The quantiles are ordered from lowest to highest along the quantile dimension.
     """
+    quantile_dim = -1
     lower_gaps = F.softplus(lower_gaps)
     lower_quantiles = central - lower_gaps.flip(dims=[quantile_dim]).cumsum(
         dim=quantile_dim
@@ -54,18 +52,9 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
     ----------
     L : int
         Number of lower quantile gaps in the center-gap representation.
-    quantile_dim : {-1, -2}
-        The dimension along which the quantiles are represented.
 
     Notes
     -----
-    If *quantile_dim* is -1, shape of input tensor is either
-    ``(N, Q)`` or ``(S, N, Q)``.
-    If *quantile_dim* is -2, shape of input tensor is either
-    ``(Q, N)`` or ``(S, Q, N)``.
-    Here, *Q* is the number of quantiles, *N* is the number of data points,
-    and *S* is the number of samples.
-
     The center-gap components along the quantile dimension is ordered as
     a central quantile, *L* lower pre-gaps, and *U* upper pre-gaps
     (``Q = 1 + L + U``).
@@ -75,17 +64,17 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
     codomain = torch.distributions.constraints.real_vector
     bijective = True
 
-    def __init__(self, L, quantile_dim=-2):
+    def __init__(self, L):
         super().__init__()
         self.L = L
-        self.quantile_dim = quantile_dim
+        self.quantile_dim = -1
 
     def _call(self, x):
         qdim = self.quantile_dim
         C = torch.narrow(x, qdim, 0, 1)
         L = torch.narrow(x, qdim, 1, self.L)
         U = torch.narrow(x, qdim, 1 + self.L, x.shape[qdim] - 1 - self.L)
-        Q = centergap_to_quantiles(C, L, U, quantile_dim=qdim)
+        Q = centergap_to_quantiles(C, L, U)
         return Q
 
     def _inverse(self, y):
@@ -131,11 +120,5 @@ def transform_centergap_posterior(posterior, L):
     The quantile dimension consists of the central quantile,
     followed by *L* lower gaps and *U* upper gaps, where *U = Q - L - 1*.
     """
-    if isinstance(posterior, gpytorch.distributions.MultitaskMultivariateNormal):
-        quantile_dim = -1
-    elif isinstance(posterior, gpytorch.distributions.MultivariateNormal):
-        quantile_dim = -2
-    else:
-        raise ValueError("Posterior is not a multivariate normal.")
-    transform = CenterGapToQuantileTransform(L, quantile_dim=quantile_dim)
+    transform = CenterGapToQuantileTransform(L)
     return torch.distributions.TransformedDistribution(posterior, transform)

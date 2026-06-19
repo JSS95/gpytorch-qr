@@ -426,9 +426,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
             center = function_samples[..., :1]
             lower_gaps = function_samples[..., 1 : 1 + lc_int]
             upper_gaps = function_samples[..., 1 + lc_int :]
-            quantiles = centergap_to_quantiles(
-                center, lower_gaps, upper_gaps, quantile_dim=-1
-            )
+            quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
         else:
             # Derive actual batch shape from function_samples, not from lc,
             # because lc may have been computed from a broadcasted kappa.
@@ -451,7 +449,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
                 lower_gaps = fs_group[..., 1 : 1 + lc_val]
                 upper_gaps = fs_group[..., 1 + lc_val :]
                 quantiles_flat[:, mask, :, :] = centergap_to_quantiles(
-                    center, lower_gaps, upper_gaps, quantile_dim=-1
+                    center, lower_gaps, upper_gaps
                 )
             quantiles = quantiles_flat.reshape(S, *B_shape, N, Q)
         return QuantileALD(

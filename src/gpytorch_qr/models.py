@@ -220,14 +220,7 @@ class CenterGapQuantileGP(QuantileGP):
 
     def mean_quantiles_delta(self, x):
         latent_posterior = self(x)
-        if isinstance(
-            latent_posterior, gpytorch.distributions.MultitaskMultivariateNormal
-        ):
-            quantile_dim = -1
-        elif isinstance(latent_posterior, gpytorch.distributions.MultivariateNormal):
-            quantile_dim = -2
-        else:
-            raise ValueError("Posterior is not a multivariate normal.")
+        quantile_dim = -1
         latent_mean = latent_posterior.mean
         num_upper = latent_mean.shape[quantile_dim] - 1 - self.num_lower_quantiles
         center_mean = torch.narrow(latent_mean, quantile_dim, 0, 1)
@@ -237,6 +230,4 @@ class CenterGapQuantileGP(QuantileGP):
         upper_gaps = torch.narrow(
             latent_mean, quantile_dim, 1 + self.num_lower_quantiles, num_upper
         )
-        return centergap_to_quantiles(
-            center_mean, lower_gaps, upper_gaps, quantile_dim=quantile_dim
-        )
+        return centergap_to_quantiles(center_mean, lower_gaps, upper_gaps)
