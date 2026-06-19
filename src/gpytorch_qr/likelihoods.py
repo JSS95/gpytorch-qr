@@ -468,6 +468,20 @@ class MultiOutputQuantileLikelihood(Likelihood):
         self.num_quantiles = [likelihood.kappa.shape[-1] for likelihood in likelihoods]
 
     def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape ``(S, *B, N, Q_1 + Q_2 + ... + Q_K)``
+            The function samples drawn from the posterior distributions of quantile
+            functions. *S* is the number of samples, *B* is the batch shape,
+            and *N* is the number of data points.
+            *Q_1, Q_2, ..., Q_K* are the number of quantiles for each of the K outputs.
+
+        Returns
+        -------
+        QuantileALD
+        """
         alds = []
         idx = 0
         for i, likelihood in enumerate(self.likelihoods):
@@ -477,13 +491,30 @@ class MultiOutputQuantileLikelihood(Likelihood):
             idx += num_q
 
         m = torch.cat([ald.m for ald in alds], dim=-1)
-        lamda = torch.cat([ald.lamda for ald in alds], dim=-1)
-        kappa = torch.cat([ald.kappa for ald in alds], dim=-1)
+        lamda = torch.cat([ald.lamda.squeeze(0) for ald in alds], dim=-1)
+        kappa = torch.cat([ald.kappa.squeeze(0) for ald in alds], dim=-1)
         return QuantileALD(m=m, lamda=lamda, kappa=kappa)
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        res = 0
-        for i, likelihood in enumerate(self.likelihoods):
-            obs = observations[..., i]
-            res += likelihood.expected_log_prob(obs, function_dist, *args, **kwargs)
-        return res
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N, K)``
+            The observed response variables for K outputs.
+        function_dist : torch.distributions.Distribution
+            The distribution of the function values at the input locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N)``
+        """
+        rep_observations = []
+        for i in range(len(self.likelihoods)):
+            num_q = self.num_quantiles[i]
+            obs = observations[..., i : i + 1]
+            rep_observations.append(
+                obs.repeat(*([1 for _ in range(len(obs.shape) - 1)] + [num_q]))
+            )
+        observations = torch.cat(rep_observations, dim=-1)
+        return super().expected_log_prob(observations, function_dist, *args, **kwargs)
