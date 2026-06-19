@@ -152,14 +152,21 @@ class _QuantileALDMixin:
 
         Parameters
         ----------
-        observations : torch.Tensor with shape ``(*B, N)``
+        observations : torch.Tensor with shape ``(*B, N)`` or ``(*B, N, Q)``
         function_dist
 
         Returns
         -------
         torch.Tensor with shape ``(*B, N)``
         """
-        observations = observations.unsqueeze(-1)  # (*B, N, 1)
+        # If observations are provided as (*B, N), add a singleton task axis so
+        # they align with QuantileALD event shape (*B, N, Q).
+        if (
+            len(function_dist.event_shape) >= 2
+            and observations.shape
+            == function_dist.batch_shape + function_dist.event_shape[:-1]
+        ):
+            observations = observations.unsqueeze(-1)  # (*B, N, 1)
         return super().expected_log_prob(observations, function_dist, *args, **kwargs)
 
 

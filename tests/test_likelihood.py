@@ -1,7 +1,7 @@
 import torch
 
 from gpytorch_qr.distributions import QuantileALD
-from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
+from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood, _QuantileALDMixin
 from gpytorch_qr.utils import centergap_to_quantiles
 
 Q = 5
@@ -10,7 +10,34 @@ N = 10
 Q_LEVELS = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
 
 
-MT_Q = Q_LEVELS  # (Q,) — no batch
+MT_Q = Q_LEVELS
+
+
+class _DummyFunctionDist:
+    def __init__(self, batch_shape, event_shape):
+        self.batch_shape = torch.Size(batch_shape)
+        self.event_shape = torch.Size(event_shape)
+
+
+class _CaptureExpectedLogProbBase:
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        return observations
+
+
+class _CaptureExpectedLogProbLikelihood(_QuantileALDMixin, _CaptureExpectedLogProbBase):
+    pass
+
+
+def test_quantile_mixin_expected_log_prob_keeps_task_dim_observations():
+    B = 3
+    obs = torch.randn(B, N, Q)
+    function_dist = _DummyFunctionDist(batch_shape=(B,), event_shape=(N, Q))
+    likelihood = _CaptureExpectedLogProbLikelihood()
+
+    out = likelihood.expected_log_prob(obs, function_dist)
+
+    assert out.shape == obs.shape
+    assert torch.equal(out, obs)
 
 
 def test_mt_lower_count_scalar_index_no_batch():
