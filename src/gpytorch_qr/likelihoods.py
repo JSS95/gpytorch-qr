@@ -517,4 +517,5 @@ class MultiOutputQuantileLikelihood(Likelihood):
                 obs.repeat(*([1 for _ in range(len(obs.shape) - 1)] + [num_q]))
             )
         observations = torch.cat(rep_observations, dim=-1)
-        return super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        ret = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return ret.sum(dim=-1)
