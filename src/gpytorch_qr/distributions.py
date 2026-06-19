@@ -1,10 +1,10 @@
-"""Asymmetric Laplace distributions for quantile regression."""
+"""Asymmetric Laplace distributions for Bayesian quantile regression."""
 
 import torch
 
 __all__ = [
     "ALD",
-    "MultitaskQuantileALD",
+    "QuantileALD",
 ]
 
 
@@ -18,7 +18,7 @@ class ALD(torch.distributions.Distribution):
     lamda : torch.Tensor
         The scale parameter of the distribution.
     kappa : torch.Tensor
-        The quantile level of the distribution.
+        The asymmetry parameter of the distribution.
 
     Attributes
     ----------
@@ -63,8 +63,8 @@ class ALD(torch.distributions.Distribution):
         )
 
 
-class MultitaskQuantileALD(ALD):
-    """Asymmetric Laplace distribution where quantiles are treated as tasks.
+class QuantileALD(ALD):
+    """Asymmetric Laplace distribution for multiple quantiles.
 
     Parameters
     ----------
@@ -83,12 +83,19 @@ class MultitaskQuantileALD(ALD):
 
     Notes
     -----
+    This class is designed for univariate Bayesian quantile regression
+    with multiple quantiles, i.e., ``y`` is a vector of univariate response
+    from which multiple quantiles are estimated.
+
     - ``S`` : the number of samples drawn from the posterior distribution.
     - ``Q`` : the number of quantiles.
     - ``B`` : additional batches.
     - ``N`` : the number of data points.
 
-    The posterior distribution have batch shape ``(*B)``.
+    Although the response is univariate, the distribution is multitask where
+    each task corresponds to a different quantile.
+    Multivariate regression with multiple quantiles can be achieved by
+    defining a likelihood class that uses multiple instances of this distribution.
     """
 
     def __init__(self, m, lamda, kappa):
@@ -99,12 +106,12 @@ class MultitaskQuantileALD(ALD):
 
         Parameters
         ----------
-        value : torch.Tensor with shape ``(*B, N)``
+        value : torch.Tensor with shape ``(*B, N, 1)`` or ``(*B, N, Q)``
             Observed response variables at which to evaluate the log probability.
 
         Returns
         -------
         logp : torch.Tensor with shape ``(S, *B, N, Q)``
-            The log probability at the given values for each quantile and sample.
+            The log probability at the given values for each task and sample.
         """
-        return super().log_prob(value.reshape(1, *value.shape, 1))
+        return super().log_prob(value.reshape(1, *value.shape))
