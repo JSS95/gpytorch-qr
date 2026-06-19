@@ -2,6 +2,7 @@
 
 import gpytorch
 import torch
+from gpytorch.likelihoods import Likelihood
 
 from .distributions import ALD, QuantileALD
 from .utils import centergap_to_quantiles
@@ -10,10 +11,11 @@ __all__ = [
     "ALDLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
+    "MultiOutputQuantileLikelihood",
 ]
 
 
-class ALDLikelihood(gpytorch.likelihoods.Likelihood):
+class ALDLikelihood(Likelihood):
     """Asymmetric Laplace distribution likelihood.
 
     Parameters
@@ -143,7 +145,25 @@ class ALDLikelihood(gpytorch.likelihoods.Likelihood):
         return ald.icdf(u)
 
 
-class DirectQuantileLikelihood(ALDLikelihood):
+class _QuantileALDMixin:
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N)``
+        function_dist
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N)``
+        """
+        observations = observations.unsqueeze(-1)  # (*B, N, 1)
+        return super().expected_log_prob(observations, function_dist, *args, **kwargs)
+
+
+class DirectQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     """Likelihood for :class:`QuantileALD` with direct representation.
 
     Multiple quantiles are treated as task dimension.
@@ -254,7 +274,7 @@ class DirectQuantileLikelihood(ALDLikelihood):
         )
 
 
-class CenterGapQuantileLikelihood(ALDLikelihood):
+class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     """Likelihood for :class:`QuantileALD` with center-gap representation.
 
     Multiple quantiles are treated as task dimension.
@@ -432,3 +452,31 @@ class CenterGapQuantileLikelihood(ALDLikelihood):
             lamda=self.scales.unsqueeze(-2),  # (*B, 1, Q)
             kappa=self.kappa.unsqueeze(-2),  # (*B, 1, Q)
         )
+
+
+class MultiOutputQuantileLikelihood(Likelihood):
+    def __init__(self, *likelihoods):
+        super().__init__()
+        self.likelihoods = torch.nn.ModuleList(likelihoods)
+        self.num_quantiles = [likelihood.kappa.shape[-1] for likelihood in likelihoods]
+
+    def forward(self, function_samples):
+        alds = []
+        idx = 0
+        for i, likelihood in enumerate(self.likelihoods):
+            num_q = self.num_quantiles[i]
+            fs = function_samples[..., idx : idx + num_q]
+            alds.append(likelihood(fs))
+            idx += num_q
+
+        m = torch.cat([ald.m for ald in alds], dim=-1)
+        lamda = torch.cat([ald.lamda for ald in alds], dim=-1)
+        kappa = torch.cat([ald.kappa for ald in alds], dim=-1)
+        return QuantileALD(m=m, lamda=lamda, kappa=kappa)
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        res = 0
+        for i, likelihood in enumerate(self.likelihoods):
+            obs = observations[..., i]
+            res += likelihood.expected_log_prob(obs, function_dist, *args, **kwargs)
+        return res

@@ -106,7 +106,7 @@ class QuantileALD(ALD):
 
         Parameters
         ----------
-        value : torch.Tensor with shape ``(*B, N)``
+        value : torch.Tensor with shape ``(*B, N, 1)`` or ``(*B, N, Q)``
             Observed response variables at which to evaluate the log probability.
 
         Returns
@@ -114,4 +114,4 @@ class QuantileALD(ALD):
         logp : torch.Tensor with shape ``(S, *B, N, Q)``
             The log probability at the given values for each task and sample.
         """
-        return super().log_prob(value.reshape(1, *value.shape, 1))
+        return super().log_prob(value.reshape(1, *value.shape))
