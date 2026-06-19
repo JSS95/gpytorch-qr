@@ -216,7 +216,10 @@ class CenterGapQuantileGP(QuantileGP):
         self.num_lower_quantiles = num_lower_quantiles
 
     def joint_quantile_posterior(self, x):
-        return transform_centergap_posterior(self(x), self.num_lower_quantiles)
+        dist = self(x)
+        Qs = [dist.event_shape[-1]]
+        Ls = [self.num_lower_quantiles]
+        return transform_centergap_posterior(dist, Qs, Ls)
 
     def mean_quantiles_delta(self, x):
         latent_posterior = self(x)
