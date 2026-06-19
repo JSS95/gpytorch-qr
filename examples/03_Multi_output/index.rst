@@ -10,3 +10,4 @@ Multi-output quantile regression expands this, modeling multiple quantiles of mu
    :maxdepth: 1
 
    mtgpqr.ipynb
+   mtgpqr_cg.ipynb
