@@ -328,7 +328,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ...     def __init__(
     ...         self,
     ...         inducing_points,
-    ...         num_quantiles,
+    ...         num_q,
     ...         num_lower_q,
     ...         num_latents,
     ...         num_lower_latents,
@@ -338,14 +338,14 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ...             N,
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         variational_strategy = CGBlkdiagLmcVariationalStrategy(
+    ...         var_strat = CGBlkdiagLmcVariationalStrategy(
     ...             VariationalStrategy(
     ...                 self,
     ...                 inducing_points,
     ...                 variational_distribution,
     ...                 learn_inducing_locations=True,
     ...             ),
-    ...             num_quantiles=num_quantiles,
+    ...             num_quantiles=num_q,
     ...             num_latents=num_latents,
     ...             num_lower_quantiles=num_lower_q,
     ...             num_lower_latents=num_lower_latents,
@@ -358,7 +358,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         super().__init__(variational_strategy, mean, covar, num_lower_q)
+    ...         super().__init__(var_strat, mean, covar, [num_q], [num_lower_q])
     >>> inducing_pts = torch.linspace(0, 1, 10).reshape(-1, 1)
     >>> central_q_index = (q - 0.5).abs().argmin().item()
     >>> num_latents = len(q) - 2  # recommended to be smaller than q
