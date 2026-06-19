@@ -151,7 +151,7 @@ def transform_centergap_posterior(posterior, Qs, Ls):
     posterior : gpytorch.distributions.MultitaskMultivariateNormal
         The center-gap posterior distribution.
         Event shape must be ``(N, Q_1 + Q_2 + ..., Q_k),
-        where Q_i is the number of quantiles for task i.
+        where ``Q_i`` is the number of quantiles for task i.
     Qs : list of int
         The number of quantiles for each task, i.e.,
         ``[Q_1, Q_2, ..., Q_k]``.
