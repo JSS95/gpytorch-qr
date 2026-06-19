@@ -7,7 +7,7 @@ from gpytorch.variational import CholeskyVariationalDistribution, VariationalStr
 from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
 from gpytorch_qr.means import CenterGapMean
 from gpytorch_qr.models import CenterGapQuantileGP
-from gpytorch_qr.variational import CGBlkdiagLmcVariationalStrategy
+from gpytorch_qr.variational import CGLmcVariationalStrategy
 
 
 def test_mtgpqr_cg():
@@ -29,24 +29,22 @@ def test_mtgpqr_cg():
             num_quantiles,
             num_lower_quantiles,
             num_latents,
-            num_lower_latents,
         ):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
                 N,
                 batch_shape=torch.Size([num_latents]),
             )
-            variational_strategy = CGBlkdiagLmcVariationalStrategy(
+            variational_strategy = CGLmcVariationalStrategy(
                 VariationalStrategy(
                     self,
                     inducing_points,
                     variational_distribution,
                     learn_inducing_locations=True,
                 ),
-                num_quantiles=num_quantiles,
-                num_latents=num_latents,
-                num_lower_quantiles=num_lower_quantiles,
-                num_lower_latents=num_lower_latents,
+                num_quantiles=[num_quantiles],
+                num_lower_quantiles=[num_lower_quantiles],
+                num_latents=[num_latents],
             )
 
             mean = CenterGapMean(
@@ -68,7 +66,7 @@ def test_mtgpqr_cg():
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
     num_latents = 7
-    gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
+    gp = MyGP(inducing_points, len(q), central_q_index, num_latents)
     likelihood = CenterGapQuantileLikelihood(q, central_q_index)
 
     gp.train()
@@ -122,24 +120,22 @@ def test_mtgpqr_cg_multivariate():
             num_quantiles,
             num_lower_quantiles,
             num_latents,
-            num_lower_latents,
         ):
             N, D = inducing_points.size()
             variational_distribution = CholeskyVariationalDistribution(
                 N,
                 batch_shape=torch.Size([num_latents]),
             )
-            variational_strategy = CGBlkdiagLmcVariationalStrategy(
+            variational_strategy = CGLmcVariationalStrategy(
                 VariationalStrategy(
                     self,
                     inducing_points,
                     variational_distribution,
                     learn_inducing_locations=True,
                 ),
-                num_quantiles=num_quantiles,
-                num_latents=num_latents,
-                num_lower_quantiles=num_lower_quantiles,
-                num_lower_latents=num_lower_latents,
+                num_quantiles=[num_quantiles],
+                num_lower_quantiles=[num_lower_quantiles],
+                num_latents=[num_latents],
             )
 
             mean = CenterGapMean(
@@ -166,7 +162,7 @@ def test_mtgpqr_cg_multivariate():
     inducing_points = torch.stack([g1.flatten(), g2.flatten()], dim=1)
     central_q_index = 1
     num_latents = 3
-    gp = MyGP(inducing_points, len(q), central_q_index, num_latents, num_latents // 2)
+    gp = MyGP(inducing_points, len(q), central_q_index, num_latents)
     likelihood = CenterGapQuantileLikelihood(q, central_q_index)
 
     gp.train()

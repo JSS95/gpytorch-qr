@@ -5,7 +5,6 @@ import torch
 
 __all__ = [
     "CGLmcVariationalStrategy",
-    "CGBlkdiagLmcVariationalStrategy",
 ]
 
 
@@ -18,10 +17,13 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     ----------
     base_variational_strategy : gpytorch.variational.VariationalStrategy
         The base variational strategy to wrap.
-    num_quantiles : int
-        The number of quantiles.
-    num_latents : int
-        The number of latent functions.
+    num_quantiles : list of int
+        The number of quantiles in each output dimension.
+    num_lower_quantiles : list of int
+        The number of lower quantiles in each output dimension
+        for center-gap representation.
+    num_latents : list of int
+        The number of latent functions for each output dimension.
     latent_dim : int, optional
         The dimension along which the latent functions are defined. Default is -1.
     jitter_val : float, optional
@@ -31,45 +33,52 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     -----
     This class modifies the standard LMC coefficients to fit the center-gap
     representation.
-    The first latent function directly represents the central quantile, and it
-    does not form any linear combinations with the other latent functions.
+    The first latent functions directly represent the central quantiles of each
+    output dimension, and it does not form any linear combinations with the other
+    latent functions.
     The remaining latent functions are linearly combined to model the gap
     functions between quantiles.
 
     Subclass can extend :meth:`construct_lmc_mask` to further restrict the
-    linear combinations, e.g., to model upper and lower gap functions
-    separately by block diagonal matrices.
+    linear combinations.
     """
 
     def __init__(
         self,
         base_variational_strategy,
-        num_quantiles,  # Q
-        num_latents,  # T
+        num_quantiles,
+        num_lower_quantiles,
+        num_latents,
         latent_dim=-1,
         jitter_val=None,
     ):
         super().__init__(
             base_variational_strategy,
-            num_quantiles,
-            num_latents,
+            sum(num_quantiles),  # Q
+            sum(num_latents),  # T
             latent_dim,
             jitter_val,
         )
+        self.list_num_quantiles = num_quantiles
+        self.list_num_lower_quantiles = num_lower_quantiles
+        self.list_num_latents = num_latents
+
+        num_outputs = len(num_quantiles)
         # lmc_coefficients: ([batch_shape], T, Q)
         lmc_coefficients = self.lmc_coefficients.detach().clone()
         del self.lmc_coefficients
 
         g0_mask = torch.zeros_like(lmc_coefficients)
-        g0_mask[..., 0, 0] = 1
+        for i in range(num_outputs):
+            g0_mask[..., i, i] = 1
         self.register_buffer("g0_mask", g0_mask)
 
         lmc_mask = torch.zeros_like(lmc_coefficients)
-        lmc_mask[..., 1:, 1:] = self.construct_lmc_mask(
+        lmc_mask[..., num_outputs:, num_outputs:] = self.construct_lmc_mask(
             torch.Size(
                 list(lmc_coefficients.shape[:-2])
-                + [lmc_coefficients.shape[-2] - 1]
-                + [lmc_coefficients.shape[-1] - 1]
+                + [lmc_coefficients.shape[-2] - num_outputs]
+                + [lmc_coefficients.shape[-1] - num_outputs]
             )
         )
         self.register_buffer("lmc_mask", lmc_mask)
@@ -85,8 +94,9 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         ----------
         shape : torch.Size
             The shape of the LMC coefficients.
-            Must be ``([batch_shape], T - 1, Q - 1)``, where ``T`` is the
-            number of latent functions and ``Q`` is the number of quantiles.
+            Must be ``([batch_shape], T - k, Q - k)``, where ``T`` is the
+            number of latent functions, ``Q`` is the number of quantiles,
+            and ``k`` is the number of output dimensions.
 
         Returns
         -------
@@ -96,61 +106,6 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
             indicates the positions of the LMC coefficients to be fixed at 0.
         """
         return torch.ones(shape)
-
-    @property
-    def lmc_coefficients(self):
-        return self._lmc_coefficients * self.lmc_mask + self.g0_mask
-
-
-class CGBlkdiagLmcVariationalStrategy(CGLmcVariationalStrategy):
-    """LMC variational strategy for the center-gap quantile regression model.
-
-    This class does not allow correlations between upper and lower gap functions.
-
-    Parameters
-    ----------
-    base_variational_strategy
-    num_quantiles
-    num_latents
-    num_lower_quantiles : int
-        The number of lower quantiles.
-    num_lower_latents : int
-        The number of lower latent functions.
-    latent_dim
-    jitter_val
-    """
-
-    def __init__(
-        self,
-        base_variational_strategy,
-        num_quantiles,  # Q
-        num_latents,  # T
-        num_lower_quantiles,
-        num_lower_latents,
-        latent_dim=-1,
-        jitter_val=None,
-    ):
-        num_upper_quantiles = num_quantiles - num_lower_quantiles - 1
-        num_upper_latents = num_latents - num_lower_latents - 1
-
-        self.num_lower_quantiles = num_lower_quantiles
-        self.num_lower_latents = num_lower_latents
-        self.num_upper_quantiles = num_upper_quantiles
-        self.num_upper_latents = num_upper_latents
-
-        super().__init__(
-            base_variational_strategy,
-            num_quantiles,
-            num_latents,
-            latent_dim,
-            jitter_val,
-        )
-
-    def construct_lmc_mask(self, shape):
-        mask = super().construct_lmc_mask(shape)
-        mask[..., : self.num_lower_latents, -self.num_upper_quantiles :] = 0
-        mask[..., -self.num_upper_latents :, : self.num_lower_quantiles] = 0
-        return mask
 
     @property
     def lmc_coefficients(self):

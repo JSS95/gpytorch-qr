@@ -323,7 +323,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
     >>> from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
-    >>> from gpytorch_qr.variational import CGBlkdiagLmcVariationalStrategy
+    >>> from gpytorch_qr.variational import CGLmcVariationalStrategy
     >>> class MyGP(CenterGapQuantileGP):
     ...     def __init__(
     ...         self,
@@ -331,24 +331,22 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ...         num_q,
     ...         num_lower_q,
     ...         num_latents,
-    ...         num_lower_latents,
     ...     ):
     ...         N, D = inducing_points.size()
     ...         variational_distribution = CholeskyVariationalDistribution(
     ...             N,
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         var_strat = CGBlkdiagLmcVariationalStrategy(
+    ...         var_strat = CGLmcVariationalStrategy(
     ...             VariationalStrategy(
     ...                 self,
     ...                 inducing_points,
     ...                 variational_distribution,
     ...                 learn_inducing_locations=True,
     ...             ),
-    ...             num_quantiles=num_q,
-    ...             num_latents=num_latents,
-    ...             num_lower_quantiles=num_lower_q,
-    ...             num_lower_latents=num_lower_latents,
+    ...             num_quantiles=[num_q],
+    ...             num_lower_quantiles=[num_lower_q],
+    ...             num_latents=[num_latents],
     ...         )
     ...         mean = CenterGapMean(
     ...             ConstantMean(batch_shape=torch.Size([1])),
@@ -362,7 +360,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     >>> inducing_pts = torch.linspace(0, 1, 10).reshape(-1, 1)
     >>> central_q_index = (q - 0.5).abs().argmin().item()
     >>> num_latents = len(q) - 2  # recommended to be smaller than q
-    >>> gp = MyGP(inducing_pts, len(q), central_q_index, num_latents, num_latents // 2)
+    >>> gp = MyGP(inducing_pts, len(q), central_q_index, num_latents)
     >>> likelihood = CenterGapQuantileLikelihood(q, central_q_index)
     >>> from gpytorch.mlls import VariationalELBO
     >>> gp.train()  # doctest: +IGNORE_OUTPUT
