@@ -44,7 +44,7 @@ def test_mtgpqr_cg():
                 ),
                 num_quantiles=[num_quantiles],
                 num_lower_quantiles=[num_lower_quantiles],
-                num_latents=[num_latents],
+                num_latents=num_latents,
             )
 
             mean = CenterGapMean(
@@ -135,7 +135,7 @@ def test_mtgpqr_cg_multivariate():
                 ),
                 num_quantiles=[num_quantiles],
                 num_lower_quantiles=[num_lower_quantiles],
-                num_latents=[num_latents],
+                num_latents=num_latents,
             )
 
             mean = CenterGapMean(

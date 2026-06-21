@@ -346,7 +346,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ...             ),
     ...             num_quantiles=[num_q],
     ...             num_lower_quantiles=[num_lower_q],
-    ...             num_latents=[num_latents],
+    ...             num_latents=num_latents,
     ...         )
     ...         mean = CenterGapMean(
     ...             ConstantMean(batch_shape=torch.Size([1])),

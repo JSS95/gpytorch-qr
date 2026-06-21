@@ -22,8 +22,8 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     num_lower_quantiles : list of int
         The number of lower quantiles in each output dimension
         for center-gap representation.
-    num_latents : list of int
-        The number of latent functions for each output dimension.
+    num_latents : int
+        The number of latent GP functions.
     latent_dim : int, optional
         The dimension along which the latent functions are defined. Default is -1.
     jitter_val : float, optional
@@ -52,16 +52,24 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         latent_dim=-1,
         jitter_val=None,
     ):
+        if num_latents < len(num_quantiles):
+            raise ValueError(
+                "num_latents must be at least the number of output dimensions."
+            )
+        if num_latents == len(num_quantiles) and any(Q > 1 for Q in num_quantiles):
+            raise ValueError(
+                "If any output dimension has more than one quantile, "
+                "num_latents must be greater than the number of output dimensions."
+            )
         super().__init__(
             base_variational_strategy,
             sum(num_quantiles),  # Q
-            sum(num_latents),  # T
+            num_latents,  # T
             latent_dim,
             jitter_val,
         )
         self.list_num_quantiles = num_quantiles
         self.list_num_lower_quantiles = num_lower_quantiles
-        self.list_num_latents = num_latents
 
         num_outputs = len(num_quantiles)
         # lmc_coefficients: ([batch_shape], T, Q)
