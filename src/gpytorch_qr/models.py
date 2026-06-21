@@ -171,7 +171,18 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
 
 
 class DirectQuantileGP(QuantileGP):
-    """Gaussian process quantile regression with direct quantile representation."""
+    """Gaussian process quantile regression with direct quantile representation.
+
+    Notes
+    -----
+    The task dimension of the output GP is structured as
+
+    .. code-block:: text
+
+        [Q_1, Q_2, ..., Q_k]
+
+    where ``Q_i`` is the number of quantiles for the i-th output dimension.
+    """
 
     def joint_quantile_posterior(self, x):
         return self(x)
@@ -206,6 +217,17 @@ class CenterGapQuantileGP(QuantileGP):
     num_lower_quantiles : list of int
         The number of lower quantiles in each output dimension
         for center-gap representation.
+
+    Notes
+    -----
+    The task dimension of the output GP is structured as
+
+    .. code-block:: text
+
+        [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+
+    where ``c_i`` is the central quantile for the i-th output dimension,
+    ``L_i`` contains the lower gaps, and ``U_i`` contains the upper gaps.
     """
 
     def __init__(
@@ -228,19 +250,19 @@ class CenterGapQuantileGP(QuantileGP):
 
     def mean_quantiles_delta(self, x):
         latent_posterior = self(x)
-        quantile_dim = -1
+        qdim = -1
         latent_mean = latent_posterior.mean
+        k = len(self.num_quantiles)
+        # gap_start: index where gap blocks begin (after k centrals)
+        gap_start = k
         quantiles = []
-        start = 0
-        for Q, L in zip(self.num_quantiles, self.num_lower_quantiles):
+        for i, (Q, L) in enumerate(zip(self.num_quantiles, self.num_lower_quantiles)):
             num_upper = Q - L - 1
-            center_mean = torch.narrow(latent_mean, quantile_dim, start, 1)
-            lower_gaps = torch.narrow(latent_mean, quantile_dim, start + 1, L)
-            upper_gaps = torch.narrow(
-                latent_mean, quantile_dim, start + 1 + L, num_upper
-            )
+            center_mean = torch.narrow(latent_mean, qdim, i, 1)
+            lower_gaps = torch.narrow(latent_mean, qdim, gap_start, L)
+            upper_gaps = torch.narrow(latent_mean, qdim, gap_start + L, num_upper)
             quantiles.append(
                 centergap_to_quantiles(center_mean, lower_gaps, upper_gaps)
             )
-            start += Q
-        return torch.cat(quantiles, dim=quantile_dim)
+            gap_start += Q - 1
+        return torch.cat(quantiles, dim=qdim)

@@ -58,9 +58,21 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
 
     Notes
     -----
-    The center-gap components along the quantile dimension is ordered as
-    a central quantile, *L* lower pre-gaps, and *U* upper pre-gaps
-    (``Q = 1 + L + U``) for each task.
+    The input tensor's quantile dimension (of length ``sum(Qs)``) is laid out as:
+
+    .. code-block:: text
+
+        [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+
+    where:
+
+    - ``c_i`` is the central quantile pre-image for task *i* (1 element),
+    - ``L_i`` contains ``Ls[i]`` lower gap pre-images for task *i*,
+    - ``U_i`` contains ``Qs[i] - 1 - Ls[i]`` upper gap pre-images for task *i*.
+
+    The output tensor has the same total length, with quantiles for each task
+    concatenated in ascending order:
+    ``[task_1_quantiles, task_2_quantiles, ..., task_k_quantiles]``.
     """
 
     domain = torch.distributions.constraints.real_vector
@@ -84,6 +96,13 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
         for q in self.Qs:
             offsets.append(offsets[-1] + q)
         self._offsets = offsets
+
+        k = len(self.Qs)
+        gap_offsets = [k]
+        for q in self.Qs:
+            gap_offsets.append(gap_offsets[-1] + q - 1)
+        self._gap_offsets = gap_offsets
+
         self.quantile_dim = -1
 
     def _call(self, x):
@@ -95,10 +114,11 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
             )
 
         out = []
-        for start, q, l in zip(self._offsets[:-1], self.Qs, self.Ls):
-            c = torch.narrow(x, qdim, start, 1)
-            lower = torch.narrow(x, qdim, start + 1, l)
-            upper = torch.narrow(x, qdim, start + 1 + l, q - 1 - l)
+        for i, (q, l) in enumerate(zip(self.Qs, self.Ls)):
+            c = torch.narrow(x, qdim, i, 1)
+            gap_start = self._gap_offsets[i]
+            lower = torch.narrow(x, qdim, gap_start, l)
+            upper = torch.narrow(x, qdim, gap_start + l, q - 1 - l)
             out.append(centergap_to_quantiles(c, lower, upper))
         return torch.cat(out, dim=qdim)
 
@@ -110,23 +130,17 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
                 f"got {y.shape[qdim]}."
             )
 
-        out = []
+        centrals = []
+        gap_parts = []
         for start, q, l in zip(self._offsets[:-1], self.Qs, self.Ls):
             yi = torch.narrow(y, qdim, start, q)
             central = torch.narrow(yi, qdim, l, 1)
             lower_gaps_linear = torch.narrow(yi, qdim, 0, l + 1).diff(dim=qdim)
             upper_gaps_linear = torch.narrow(yi, qdim, l, q - l).diff(dim=qdim)
-            out.append(
-                torch.cat(
-                    [
-                        central,
-                        _softplus_inverse(lower_gaps_linear),
-                        _softplus_inverse(upper_gaps_linear),
-                    ],
-                    dim=qdim,
-                )
-            )
-        return torch.cat(out, dim=qdim)
+            centrals.append(central)
+            gap_parts.append(_softplus_inverse(lower_gaps_linear))
+            gap_parts.append(_softplus_inverse(upper_gaps_linear))
+        return torch.cat(centrals + gap_parts, dim=qdim)
 
     def log_abs_det_jacobian(self, x, y):
         qdim = self.quantile_dim
@@ -137,8 +151,8 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
             )
 
         gap_blocks = []
-        for start, q in zip(self._offsets[:-1], self.Qs):
-            gap_blocks.append(torch.narrow(x, qdim, start + 1, q - 1))
+        for i, q in enumerate(self.Qs):
+            gap_blocks.append(torch.narrow(x, qdim, self._gap_offsets[i], q - 1))
         gaps = torch.cat(gap_blocks, dim=qdim)
         return F.logsigmoid(gaps).sum(dim=(-2, -1))
 
