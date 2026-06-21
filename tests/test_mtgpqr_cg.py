@@ -42,9 +42,10 @@ def test_mtgpqr_cg():
                     variational_distribution,
                     learn_inducing_locations=True,
                 ),
+                num_quantiles,
+                num_latents,
                 num_quantiles=[num_quantiles],
                 num_lower_quantiles=[num_lower_quantiles],
-                num_latents=num_latents,
             )
 
             mean = CenterGapMean(
@@ -133,9 +134,10 @@ def test_mtgpqr_cg_multivariate():
                     variational_distribution,
                     learn_inducing_locations=True,
                 ),
+                num_quantiles,
+                num_latents,
                 num_quantiles=[num_quantiles],
                 num_lower_quantiles=[num_lower_quantiles],
-                num_latents=num_latents,
             )
 
             mean = CenterGapMean(

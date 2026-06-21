@@ -15,19 +15,20 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
 
     Parameters
     ----------
-    base_variational_strategy : gpytorch.variational.VariationalStrategy
-        The base variational strategy to wrap.
-    num_quantiles : list of int
+    base_variational_strategy
+    num_tasks
+    num_latents
+    latent_dim
+    jitter_val
+    num_quantiles : list of int, optional
         The number of quantiles in each output dimension.
-    num_lower_quantiles : list of int
+        Its sum must equal *num_tasks*.
+        If not passed, defaults to ``[num_tasks]``, i.e.,
+        output is assumed to be 1-dimensional.
+    num_lower_quantiles : list of int, optional
         The number of lower quantiles in each output dimension
         for center-gap representation.
-    num_latents : int
-        The number of latent GP functions.
-    latent_dim : int, optional
-        The dimension along which the latent functions are defined. Default is -1.
-    jitter_val : float, optional
-        The jitter value to add to the covariance matrix for numerical stability.
+        If not passed, defaults to a balanced split of the quantiles.
 
     Notes
     -----
@@ -46,12 +47,23 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     def __init__(
         self,
         base_variational_strategy,
-        num_quantiles,
-        num_lower_quantiles,
+        num_tasks,
         num_latents,
         latent_dim=-1,
         jitter_val=None,
+        num_quantiles=None,
+        num_lower_quantiles=None,
     ):
+        if num_quantiles is None:
+            num_quantiles = [num_tasks]
+        if num_lower_quantiles is None:
+            nlq = []
+            for Q in num_quantiles:
+                nlq.append((Q - 1) // 2)
+            num_lower_quantiles = nlq
+        if not sum(num_quantiles) == num_tasks:
+            raise ValueError("The sum of num_quantiles must equal num_tasks.")
+
         if num_latents < len(num_quantiles):
             raise ValueError(
                 "num_latents must be at least the number of output dimensions."
@@ -63,13 +75,13 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
             )
         super().__init__(
             base_variational_strategy,
-            sum(num_quantiles),  # Q
+            num_tasks,  # Q
             num_latents,  # T
             latent_dim,
             jitter_val,
         )
-        self.list_num_quantiles = num_quantiles
-        self.list_num_lower_quantiles = num_lower_quantiles
+        self.num_quantiles = num_quantiles
+        self.num_lower_quantiles = num_lower_quantiles
 
         num_outputs = len(num_quantiles)
         # lmc_coefficients: ([batch_shape], T, Q)
