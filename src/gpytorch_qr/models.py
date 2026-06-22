@@ -171,7 +171,18 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
 
 
 class DirectQuantileGP(QuantileGP):
-    """Gaussian process quantile regression with direct quantile representation."""
+    """Gaussian process quantile regression with direct quantile representation.
+
+    Notes
+    -----
+    The task dimension of the output GP is structured as
+
+    .. code-block:: text
+
+        [*Q_1, *Q_2, ..., *Q_k]
+
+    where ``Q_i`` contains quantiles for the i-th output dimension.
+    """
 
     def joint_quantile_posterior(self, x):
         return self(x)
@@ -201,8 +212,23 @@ class CenterGapQuantileGP(QuantileGP):
     mean_module : gpytorch_qr.centergap.CenterGapMean
         Mean module for center-gap representation.
     covar_module
-    num_lower_quantiles : int
-        The number of lower quantiles in center-gap representation.
+    num_quantiles : list of int
+        The number of quantiles in each output dimension.
+    num_lower_quantiles : list of int
+        The number of lower quantiles in each output dimension
+        for center-gap representation.
+
+    Notes
+    -----
+    The task dimension of the output GP is structured as
+
+    .. code-block:: text
+
+        [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+
+    where ``c_i`` is the central quantile for the i-th output dimension,
+    ``L_i`` contains the pre-softplus-transformed lower gaps,
+    and ``U_i`` contains the pre-softplus-transformed upper gaps.
     """
 
     def __init__(
@@ -210,33 +236,34 @@ class CenterGapQuantileGP(QuantileGP):
         variational_strategy,
         mean_module,
         covar_module,
+        num_quantiles,
         num_lower_quantiles,
     ):
         super().__init__(variational_strategy, mean_module, covar_module)
+        self.num_quantiles = num_quantiles
         self.num_lower_quantiles = num_lower_quantiles
 
     def joint_quantile_posterior(self, x):
-        return transform_centergap_posterior(self(x), self.num_lower_quantiles)
+        dist = self(x)
+        Qs = self.num_quantiles
+        Ls = self.num_lower_quantiles
+        return transform_centergap_posterior(dist, Qs, Ls)
 
     def mean_quantiles_delta(self, x):
         latent_posterior = self(x)
-        if isinstance(
-            latent_posterior, gpytorch.distributions.MultitaskMultivariateNormal
-        ):
-            quantile_dim = -1
-        elif isinstance(latent_posterior, gpytorch.distributions.MultivariateNormal):
-            quantile_dim = -2
-        else:
-            raise ValueError("Posterior is not a multivariate normal.")
+        qdim = -1
         latent_mean = latent_posterior.mean
-        num_upper = latent_mean.shape[quantile_dim] - 1 - self.num_lower_quantiles
-        center_mean = torch.narrow(latent_mean, quantile_dim, 0, 1)
-        lower_gaps = torch.narrow(
-            latent_mean, quantile_dim, 1, self.num_lower_quantiles
-        )
-        upper_gaps = torch.narrow(
-            latent_mean, quantile_dim, 1 + self.num_lower_quantiles, num_upper
-        )
-        return centergap_to_quantiles(
-            center_mean, lower_gaps, upper_gaps, quantile_dim=quantile_dim
-        )
+        k = len(self.num_quantiles)
+        # gap_start: index where gap blocks begin (after k centrals)
+        gap_start = k
+        quantiles = []
+        for i, (Q, L) in enumerate(zip(self.num_quantiles, self.num_lower_quantiles)):
+            num_upper = Q - L - 1
+            center_mean = torch.narrow(latent_mean, qdim, i, 1)
+            lower_gaps = torch.narrow(latent_mean, qdim, gap_start, L)
+            upper_gaps = torch.narrow(latent_mean, qdim, gap_start + L, num_upper)
+            quantiles.append(
+                centergap_to_quantiles(center_mean, lower_gaps, upper_gaps)
+            )
+            gap_start += Q - 1
+        return torch.cat(quantiles, dim=qdim)

@@ -4,19 +4,19 @@ import gpytorch
 import torch
 from gpytorch.likelihoods import Likelihood
 
-from .distributions import ALD, QuantileALD
+from .distributions import QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
-    "ALDLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
-    "MultiOutputQuantileLikelihood",
+    "MultiOutputDirectQuantileLikelihood",
+    "MultiOutputCenterGapQuantileLikelihood",
 ]
 
 
-class ALDLikelihood(Likelihood):
-    """Asymmetric Laplace distribution likelihood.
+class _QuantileLikelihoodMixin:
+    """Asymmetric Laplace distribution likelihood for Bayesian quantile regression.
 
     Parameters
     ----------
@@ -72,42 +72,26 @@ class ALDLikelihood(Likelihood):
     def scales(self):
         return self.raw_scales_constraint.transform(self.raw_scales)
 
-    def forward(self, function_samples):
-        """Return the ALD distribution for the given function samples.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor with shape ``(S, *B)``
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples and *B* is the batch shape of
-            scales and quantiles.
-
-        Returns
-        -------
-        ALD
-        """
-        return ALD(
-            m=function_samples,
-            lamda=self.scales,  # (*B)
-            kappa=self.kappa,  # (*B)
-        )
-
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
         """Expected log probability of the observed data under the ALD likelihood.
 
         Parameters
         ----------
-        observations : torch.Tensor with shape ``(*B, N, *T)``
+        observations : torch.Tensor with shape ``(*B, N)``
             The observed response variables.
         function_dist : torch.distributions.Distribution
-            The distribution of the function values at the input locations.
+            Latent GP posterior at the observed locations.
 
         Returns
         -------
         torch.Tensor with shape ``(*B, N)``
             The expected log probability of the observed data under the ALD likelihood.
         """
-        # lp: (*B, N, *T)
+        # res: (*B, N, *T).
+        # super().expected_log_prob internally uses self.forward() to convert
+        # GP posterior to ALD, then computes the log probability of observations.
+        # Thus, subclass can just implement forward().
+        observations = observations.unsqueeze(-1)  # (*B, N, 1)
         res = super().expected_log_prob(observations, function_dist, *args, **kwargs)
 
         num_event_dim = len(function_dist.event_shape)
@@ -116,12 +100,12 @@ class ALDLikelihood(Likelihood):
         return res
 
     def predictive_posterior(self, gp_posterior):
-        """Predictive posterior distribution of function values.
+        """Sample from predictive posterior distribution of function values.
 
         Parameters
         ----------
         gp_posterior : gpytorch.distributions.MultivariateNormal
-            The joint posterior over latent GPs at input locations.
+            Latent GP posterior at input locations.
 
         Returns
         -------
@@ -136,44 +120,17 @@ class ALDLikelihood(Likelihood):
         .. code-block:: python
 
             with torch.no_grad(), gpytorch.settings.num_likelihood_samples(1000):
-                pp_dist = gp(x_pred)
-            ci_lower = pp_dist.quantile(0.025, dim=0)
-            ci_upper = pp_dist.quantile(0.975, dim=0)
+                pp_sample = likelihood.predictive_posterior(gp(x_pred))
+            ci_lower = pp_sample.quantile(0.025, dim=0)
+            ci_upper = pp_sample.quantile(0.975, dim=0)
         """
         ald = self(gp_posterior)
         u = torch.rand_like(ald.m)
         return ald.icdf(u)
 
 
-class _QuantileALDMixin:
-
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        """Expected log probability of the observed data under the ALD likelihood.
-
-        Parameters
-        ----------
-        observations : torch.Tensor with shape ``(*B, N)`` or ``(*B, N, Q)``
-        function_dist
-
-        Returns
-        -------
-        torch.Tensor with shape ``(*B, N)``
-        """
-        # If observations are provided as (*B, N), add a singleton task axis so
-        # they align with QuantileALD event shape (*B, N, Q).
-        if (
-            len(function_dist.event_shape) >= 2
-            and observations.shape
-            == function_dist.batch_shape + function_dist.event_shape[:-1]
-        ):
-            observations = observations.unsqueeze(-1)  # (*B, N, 1)
-        return super().expected_log_prob(observations, function_dist, *args, **kwargs)
-
-
-class DirectQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
-    """Likelihood for :class:`QuantileALD` with direct representation.
-
-    Multiple quantiles are treated as task dimension.
+class DirectQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
+    """Likelihood for single-output multi-quantile GPQR with direct representation.
 
     Parameters
     ----------
@@ -187,6 +144,16 @@ class DirectQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ----------
     kappa : torch.Tensor with shape ``(*B, Q)``
     raw_scales : torch.Tensor with shape ``(*B, Q)``
+
+    Notes
+    -----
+    The task dimension of the input GP posterior should be structured as
+
+    .. code-block:: text
+
+        [q_1, q_2, ..., q_Q]
+
+    where ``q_i`` is the *i*-th quantile function.
 
     Example
     -------
@@ -266,8 +233,8 @@ class DirectQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
         Parameters
         ----------
         function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of tasks,
+            The function samples drawn from the GP posterior distribution.
+            *S* is the number of samples, *Q* is the number of tasks,
             *B* is the batch shape, and *N* is the number of data points.
 
         Returns
@@ -281,11 +248,8 @@ class DirectQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
         )
 
 
-class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
-    """Likelihood for :class:`QuantileALD` with center-gap representation.
-
-    Multiple quantiles are treated as task dimension.
-    Latent GPs model the central quantile and the gaps between quantiles separately.
+class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
+    """Likelihood for single-output multi-quantile GPQR with center-gap representation.
 
     Parameters
     ----------
@@ -301,6 +265,18 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ----------
     kappa : torch.Tensor with shape ``(*B, Q)``
     raw_scales : torch.Tensor with shape ``(*B, Q)``
+
+    Notes
+    -----
+    The task dimension of the input GP posterior should be structured as
+
+    .. code-block:: text
+
+        [c, *L, *U]
+
+    where ``c`` is the central quantile,
+    ``L`` contains the pre-softplus-transformed lower gaps, and
+    ``U`` contains the pre-softplus-transformed upper gaps.
 
     Examples
     --------
@@ -323,32 +299,31 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
     >>> from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
-    >>> from gpytorch_qr.variational import CGBlkdiagLmcVariationalStrategy
+    >>> from gpytorch_qr.variational import CGLmcVariationalStrategy
     >>> class MyGP(CenterGapQuantileGP):
     ...     def __init__(
     ...         self,
     ...         inducing_points,
-    ...         num_quantiles,
+    ...         num_q,
     ...         num_lower_q,
     ...         num_latents,
-    ...         num_lower_latents,
     ...     ):
     ...         N, D = inducing_points.size()
     ...         variational_distribution = CholeskyVariationalDistribution(
     ...             N,
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         variational_strategy = CGBlkdiagLmcVariationalStrategy(
+    ...         var_strat = CGLmcVariationalStrategy(
     ...             VariationalStrategy(
     ...                 self,
     ...                 inducing_points,
     ...                 variational_distribution,
     ...                 learn_inducing_locations=True,
     ...             ),
-    ...             num_quantiles=num_quantiles,
-    ...             num_latents=num_latents,
-    ...             num_lower_quantiles=num_lower_q,
-    ...             num_lower_latents=num_lower_latents,
+    ...             num_q,
+    ...             num_latents,
+    ...             num_quantiles=[num_q],
+    ...             num_lower_quantiles=[num_lower_q],
     ...         )
     ...         mean = CenterGapMean(
     ...             ConstantMean(batch_shape=torch.Size([1])),
@@ -358,11 +333,11 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
     ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         super().__init__(variational_strategy, mean, covar, num_lower_q)
+    ...         super().__init__(var_strat, mean, covar, [num_q], [num_lower_q])
     >>> inducing_pts = torch.linspace(0, 1, 10).reshape(-1, 1)
     >>> central_q_index = (q - 0.5).abs().argmin().item()
     >>> num_latents = len(q) - 2  # recommended to be smaller than q
-    >>> gp = MyGP(inducing_pts, len(q), central_q_index, num_latents, num_latents // 2)
+    >>> gp = MyGP(inducing_pts, len(q), central_q_index, num_latents)
     >>> likelihood = CenterGapQuantileLikelihood(q, central_q_index)
     >>> from gpytorch.mlls import VariationalELBO
     >>> gp.train()  # doctest: +IGNORE_OUTPUT
@@ -412,8 +387,8 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
         Parameters
         ----------
         function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *Q* is the number of tasks,
+            The function samples drawn from the GP posterior distribution.
+            *S* is the number of samples, *Q* is the number of tasks,
             *B* is the batch shape, and *N* is the number of data points.
 
         Returns
@@ -426,9 +401,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
             center = function_samples[..., :1]
             lower_gaps = function_samples[..., 1 : 1 + lc_int]
             upper_gaps = function_samples[..., 1 + lc_int :]
-            quantiles = centergap_to_quantiles(
-                center, lower_gaps, upper_gaps, quantile_dim=-1
-            )
+            quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
         else:
             # Derive actual batch shape from function_samples, not from lc,
             # because lc may have been computed from a broadcasted kappa.
@@ -451,7 +424,7 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
                 lower_gaps = fs_group[..., 1 : 1 + lc_val]
                 upper_gaps = fs_group[..., 1 + lc_val :]
                 quantiles_flat[:, mask, :, :] = centergap_to_quantiles(
-                    center, lower_gaps, upper_gaps, quantile_dim=-1
+                    center, lower_gaps, upper_gaps
                 )
             quantiles = quantiles_flat.reshape(S, *B_shape, N, Q)
         return QuantileALD(
@@ -461,22 +434,72 @@ class CenterGapQuantileLikelihood(_QuantileALDMixin, ALDLikelihood):
         )
 
 
-class MultiOutputQuantileLikelihood(Likelihood):
+class _MultiOutputQuantileLikelihoodMixin:
+    """Likelihood for multi-output multi-quantile GPQR."""
+
     def __init__(self, *likelihoods):
         super().__init__()
         self.likelihoods = torch.nn.ModuleList(likelihoods)
+        self.num_outputs = len(likelihoods)
         self.num_quantiles = [likelihood.kappa.shape[-1] for likelihood in likelihoods]
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N, *T)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            Latent GP posterior at the observed locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        rep_observations = []
+        for i in range(self.num_outputs):
+            num_q = self.num_quantiles[i]
+            obs = observations[..., i : i + 1]
+            rep_observations.append(
+                obs.repeat(*([1 for _ in range(len(obs.shape) - 1)] + [num_q]))
+            )
+        observations = torch.cat(rep_observations, dim=-1)
+        ret = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+        return ret.sum(dim=-1)
+
+
+class MultiOutputDirectQuantileLikelihood(
+    _MultiOutputQuantileLikelihoodMixin,
+    Likelihood,
+):
+    """Likelihood for multi-output multi-quantile direct GPQR.
+
+    Parameters
+    ----------
+    *likelihoods : list of DirectQuantileLikelihood
+
+    Notes
+    -----
+    The task dimension of the input GP posterior should be structured as
+
+    .. code-block:: text
+
+        [*Q_1, *Q_2, ..., *Q_k]
+
+    where ``Q_i`` contains quantiles for the i-th output dimension.
+    """
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
 
         Parameters
         ----------
-        function_samples : torch.Tensor with shape ``(S, *B, N, Q_1 + Q_2 + ... + Q_K)``
-            The function samples drawn from the posterior distributions of quantile
-            functions. *S* is the number of samples, *B* is the batch shape,
-            and *N* is the number of data points.
-            *Q_1, Q_2, ..., Q_K* are the number of quantiles for each of the K outputs.
+        function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
+            The function samples drawn from the GP posterior distribution.
+            *S* is the number of samples, *Q* is the number of tasks,
+            *B* is the batch shape, and *N* is the number of data points.
 
         Returns
         -------
@@ -484,7 +507,8 @@ class MultiOutputQuantileLikelihood(Likelihood):
         """
         alds = []
         idx = 0
-        for i, likelihood in enumerate(self.likelihoods):
+        for i in range(self.num_outputs):
+            likelihood = self.likelihoods[i]
             num_q = self.num_quantiles[i]
             fs = function_samples[..., idx : idx + num_q]
             alds.append(likelihood(fs))
@@ -495,27 +519,58 @@ class MultiOutputQuantileLikelihood(Likelihood):
         kappa = torch.cat([ald.kappa.squeeze(0) for ald in alds], dim=-1)
         return QuantileALD(m=m, lamda=lamda, kappa=kappa)
 
-    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
-        """Expected log probability of the observed data under the ALD likelihood.
+
+class MultiOutputCenterGapQuantileLikelihood(
+    _MultiOutputQuantileLikelihoodMixin,
+    Likelihood,
+):
+    """Likelihood for multi-output multi-quantile center-gap GPQR.
+
+    Parameters
+    ----------
+    *likelihoods : list of CenterGapQuantileLikelihood
+
+    Notes
+    -----
+    The task dimension of the input GP posterior should be structured as
+
+    .. code-block:: text
+
+        [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+
+    where ``c_i`` is the central quantile for the i-th output dimension,
+    ``L_i`` contains the pre-softplus-transformed lower gaps,
+    and ``U_i`` contains the pre-softplus-transformed upper gaps.
+    """
+
+    def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
 
         Parameters
         ----------
-        observations : torch.Tensor with shape ``(*B, N, K)``
-            The observed response variables for K outputs.
-        function_dist : torch.distributions.Distribution
-            The distribution of the function values at the input locations.
+        function_samples : torch.Tensor with shape ``(S, *B, N, Q)``
+            The function samples drawn from the GP posterior distribution.
+            *S* is the number of samples, *Q* is the number of tasks,
+            *B* is the batch shape, and *N* is the number of data points.
 
         Returns
         -------
-        torch.Tensor with shape ``(*B, N)``
+        QuantileALD
         """
-        rep_observations = []
-        for i in range(len(self.likelihoods)):
+        alds = []
+        gap_idx = self.num_outputs
+        for i in range(self.num_outputs):
+            likelihood = self.likelihoods[i]
             num_q = self.num_quantiles[i]
-            obs = observations[..., i : i + 1]
-            rep_observations.append(
-                obs.repeat(*([1 for _ in range(len(obs.shape) - 1)] + [num_q]))
-            )
-        observations = torch.cat(rep_observations, dim=-1)
-        ret = super().expected_log_prob(observations, function_dist, *args, **kwargs)
-        return ret.sum(dim=-1)
+            num_gaps = num_q - 1
+
+            center = function_samples[..., i : i + 1]
+            gaps = function_samples[..., gap_idx : gap_idx + num_gaps]
+            fs = torch.cat([center, gaps], dim=-1)
+            alds.append(likelihood(fs))
+            gap_idx += num_gaps
+
+        m = torch.cat([ald.m for ald in alds], dim=-1)
+        lamda = torch.cat([ald.lamda.squeeze(0) for ald in alds], dim=-1)
+        kappa = torch.cat([ald.kappa.squeeze(0) for ald in alds], dim=-1)
+        return QuantileALD(m=m, lamda=lamda, kappa=kappa)
