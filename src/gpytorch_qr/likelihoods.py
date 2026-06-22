@@ -77,7 +77,7 @@ class _QuantileLikelihoodMixin:
 
         Parameters
         ----------
-        observations : torch.Tensor with shape ``(*B, N, *T)``
+        observations : torch.Tensor with shape ``(*B, N)``
             The observed response variables.
         function_dist : torch.distributions.Distribution
             Latent GP posterior at the observed locations.
@@ -91,6 +91,7 @@ class _QuantileLikelihoodMixin:
         # super().expected_log_prob internally uses self.forward() to convert
         # GP posterior to ALD, then computes the log probability of observations.
         # Thus, subclass can just implement forward().
+        observations = observations.unsqueeze(-1)  # (*B, N, 1)
         res = super().expected_log_prob(observations, function_dist, *args, **kwargs)
 
         num_event_dim = len(function_dist.event_shape)

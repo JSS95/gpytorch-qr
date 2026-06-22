@@ -114,4 +114,5 @@ class QuantileALD(ALD):
         logp : torch.Tensor with shape ``(S, *B, N, Q)``
             The log probability at the given values for each task and sample.
         """
-        return super().log_prob(value.reshape(1, *value.shape))
+        value = value.reshape(1, *value.shape)  # (1, *B, N, Q)
+        return super().log_prob(value)
