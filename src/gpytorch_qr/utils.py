@@ -25,8 +25,8 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     Returns
     -------
     quantiles : torch.Tensor with shape (..., Q)
-        Quantile values. (Q = L + U + 1 at *quantile_dim*)
-        The quantiles are ordered from lowest to highest along the quantile dimension.
+        Quantile values. (Q = L + U + 1)
+        The quantiles are ordered in increasing order along the quantile dimension.
     """
     quantile_dim = -1
     lower_gaps = F.softplus(lower_gaps)
@@ -46,19 +46,19 @@ def _softplus_inverse(y):
 
 
 class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
-    """Bijective transform from center-gap distribution to quantile distribution.
+    """Transformation from center-gap distribution to quantile distribution.
 
     Parameters
     ----------
     Qs : list of int
-        The number of quantiles for each task, i.e.,
-        ``[Q_1, Q_2, ..., Q_k]``.
+        The number of quantiles for each task, i.e., ``[Q_1, Q_2, ..., Q_k]``.
     Ls : list of int
-        The number of lower quantiles in center-gap representation for each task.
+        The number of lower quantiles in center-gap representation for each task,
+        i.e., ``[L_1, L_2, ..., L_k]``.
 
     Notes
     -----
-    The input tensor's quantile dimension (of length ``sum(Qs)``) is laid out as:
+    The input distribution's quantile dimension should be laid out as:
 
     .. code-block:: text
 
@@ -66,13 +66,15 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
 
     where:
 
-    - ``c_i`` is the central quantile pre-image for task *i* (1 element),
-    - ``L_i`` contains ``Ls[i]`` lower gap pre-images for task *i*,
-    - ``U_i`` contains ``Qs[i] - 1 - Ls[i]`` upper gap pre-images for task *i*.
+    - ``c_i`` is the central quantile for *i*-th output dimension,
+    - ``L_i`` contains pre-softplus-transformed lower gaps for *i*-th output dimension,
+    - ``U_i`` contains pre-softplus-transformed upper gaps for *i*-th output dimension.
 
-    The output tensor has the same total length, with quantiles for each task
-    concatenated in ascending order:
-    ``[task_1_quantiles, task_2_quantiles, ..., task_k_quantiles]``.
+    The output distribution's quantile dimension is laid out as:
+
+    .. code-block:: text
+
+        [*Q_1, *Q_2, ..., *Q_k].
     """
 
     domain = torch.distributions.constraints.real_vector
@@ -164,13 +166,13 @@ def transform_centergap_posterior(posterior, Qs, Ls):
     ----------
     posterior : gpytorch.distributions.MultitaskMultivariateNormal
         The center-gap posterior distribution.
-        Event shape must be ``(N, Q_1 + Q_2 + ..., Q_k),
-        where ``Q_i`` is the number of quantiles for task i.
+        Event shape must be ``(N, Q_1 + Q_2 + ..., Q_k)``,
+        where ``Q_i`` is the number of quantiles for *i*-th output dimension.
     Qs : list of int
-        The number of quantiles for each task, i.e.,
-        ``[Q_1, Q_2, ..., Q_k]``.
+        The number of quantiles for each task, i.e., ``[Q_1, Q_2, ..., Q_k]``.
     Ls : list of int
-        The number of lower quantiles in center-gap representation for each task.
+        The number of lower quantiles in center-gap representation for each task,
+        i.e., ``[L_1, L_2, ..., L_k]``.
 
     Returns
     -------
@@ -181,9 +183,8 @@ def transform_centergap_posterior(posterior, Qs, Ls):
 
     Notes
     -----
-    The quantile dimension consists of the central quantile,
-    followed by *L* lower gaps and *U* upper gaps, where *U = Q - L - 1*
-    for each task.
+    Input and output distribution has specific structure in the quantile dimension.
+    See :class:`CenterGapToQuantileTransform` for details.
     """
     transform = CenterGapToQuantileTransform(Qs, Ls)
     return torch.distributions.TransformedDistribution(posterior, transform)

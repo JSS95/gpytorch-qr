@@ -33,12 +33,35 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     Notes
     -----
     This class modifies the standard LMC coefficients to fit the center-gap
-    representation.
-    The first latent functions directly represent the central quantiles of each
-    output dimension, and it does not form any linear combinations with the other
+    representation with ``k`` outputs.
+    The first ``k`` latent functions directly represent the central quantiles of each
+    output dimension, and they do not form any linear combinations with the other
     latent functions.
     The remaining latent functions are linearly combined to model the gap
     functions between quantiles.
+
+    The input ``T`` latent GPs are structured as
+
+    .. code-block:: text
+
+        [c_1, c_2, ..., c_k,  g_1, g_2, ..., g_{T-k}]
+
+    where:
+
+    - ``c_i`` is the central quantile for *i*-th output dimension,
+    - ``g_j`` is the *j*-th latent function for modeling the gaps between quantiles.
+
+    The output multitask GPs are structured as
+
+    .. code-block:: text
+
+        [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+
+    where:
+
+    - ``c_i`` is the central quantile for *i*-th output dimension,
+    - ``L_i`` contains pre-softplus-transformed lower gaps for *i*-th output dimension,
+    - ``U_i`` contains pre-softplus-transformed upper gaps for *i*-th output dimension.
 
     Subclass can extend :meth:`construct_lmc_mask` to further restrict the
     linear combinations.
