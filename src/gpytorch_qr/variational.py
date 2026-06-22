@@ -106,50 +106,42 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         self.num_quantiles = num_quantiles
         self.num_lower_quantiles = num_lower_quantiles
 
-        num_outputs = len(num_quantiles)
-        # lmc_coefficients: ([batch_shape], T, Q)
+        # lmc_coefficients: (*B, T, Q)
         lmc_coefficients = self.lmc_coefficients.detach().clone()
         del self.lmc_coefficients
-
-        g0_mask = torch.zeros_like(lmc_coefficients)
-        for i in range(num_outputs):
-            g0_mask[..., i, i] = 1
-        self.register_buffer("g0_mask", g0_mask)
-
-        lmc_mask = torch.zeros_like(lmc_coefficients)
-        lmc_mask[..., num_outputs:, num_outputs:] = self.construct_lmc_mask(
-            torch.Size(
-                list(lmc_coefficients.shape[:-2])
-                + [lmc_coefficients.shape[-2] - num_outputs]
-                + [lmc_coefficients.shape[-1] - num_outputs]
-            )
-        )
-        self.register_buffer("lmc_mask", lmc_mask)
-
         self.register_parameter(
             "_lmc_coefficients", torch.nn.Parameter(lmc_coefficients)
         )
 
-    def construct_lmc_mask(self, shape):
+        T, Q = lmc_coefficients.shape[-2:]
+        k = len(num_quantiles)
+        self.register_buffer("lmc_mask", self.construct_lmc_mask(T, Q, k))
+
+    def construct_lmc_mask(self, T, Q, k):
         """Construct a mask to restrict the LMC structure.
 
         Parameters
         ----------
-        shape : torch.Size
-            The shape of the LMC coefficients.
-            Must be ``([batch_shape], T - k, Q - k)``, where ``T`` is the
-            number of latent functions, ``Q`` is the number of quantiles,
-            and ``k`` is the number of output dimensions.
+        T : int
+            The number of latent functions.
+        Q : int
+            The number of quantiles.
+        k : int
+            The number of output dimensions.
 
         Returns
         -------
-        lmc_mask : torch.Tensor with shape ``shape``
+        lmc_mask : torch.Tensor with shape ``(T, Q)``
             A binary mask of the same shape as the LMC coefficients, where 1
             indicates the positions of the LMC coefficients to be learned, and 0
             indicates the positions of the LMC coefficients to be fixed at 0.
         """
-        return torch.ones(shape)
+        mask = torch.zeros(T, Q)
+        for i in range(k):
+            mask[i, i] = 1  # Central quantiles
+        mask[k:, k:] = 1  # Gap functions
+        return mask
 
     @property
     def lmc_coefficients(self):
-        return self._lmc_coefficients * self.lmc_mask + self.g0_mask
+        return self._lmc_coefficients * self.lmc_mask
