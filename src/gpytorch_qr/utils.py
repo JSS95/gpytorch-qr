@@ -18,9 +18,9 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     central : torch.Tensor with shape (..., 1)
         The central quantile values.
     lower_gaps : torch.Tensor with shape (..., L)
-        Pre-transformed lower gap values.
+        Pre-softplus-transformed lower gap values.
     upper_gaps : torch.Tensor with shape (..., U)
-        Pre-transformed upper gap values.
+        Pre-softplus-transformed upper gap values.
 
     Returns
     -------

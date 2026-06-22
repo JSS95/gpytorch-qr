@@ -179,9 +179,9 @@ class DirectQuantileGP(QuantileGP):
 
     .. code-block:: text
 
-        [Q_1, Q_2, ..., Q_k]
+        [*Q_1, *Q_2, ..., *Q_k]
 
-    where ``Q_i`` is the number of quantiles for the i-th output dimension.
+    where ``Q_i`` contains quantiles for the i-th output dimension.
     """
 
     def joint_quantile_posterior(self, x):
@@ -227,7 +227,8 @@ class CenterGapQuantileGP(QuantileGP):
         [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
 
     where ``c_i`` is the central quantile for the i-th output dimension,
-    ``L_i`` contains the lower gaps, and ``U_i`` contains the upper gaps.
+    ``L_i`` contains the pre-softplus-transformed lower gaps,
+    and ``U_i`` contains the pre-softplus-transformed upper gaps.
     """
 
     def __init__(
