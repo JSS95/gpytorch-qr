@@ -1,15 +1,19 @@
 Setting the mean module
 =======================
 
-Prior distribution of latent functions can be directly set to :math:`f(x) \sim \mathcal{N}(\mu(x), k(x, x'))`.
+Prior mean :math:`\mu(x)` can be directly set to the prior distribution :math:`\mathcal{N}(\mu(x), k(x, x'))`.
 
-This method is more convenient, but it can be inappropriate when latent GP does not directly form output GPs.
-The caveat is that :math:`\mu(x)` usually describes :math:`y`, while the prior mean is on the latent GP.
+This method is convenient to implement, but it can be inappropriate when latent GP :math:`g_j(x)` does not directly form quantiles :math:`Q_{\tau_i}(x)`.
 When indirect representation or correlation structure is involved, special care is needed.
 Refer to :ref:`basic-usage` for more details on representation and correlation structure.
 
 Direct representation
 ---------------------
+
+If quantile functions :math:`Q_{\tau_i}(x)` are directly represented and uncorrelated, prior means :math:`\mu_i(x)` can be individually set for each latent GP :math:`g_i(x)`.
+
+If quantile functions :math:`Q_{\tau_i}(x)` are directly represented but correlated, their prior means cannot be directly set.
+However, if the desired prior means of :math:`Q_{\tau_i}(x)` are members of a family of functions that is closed to linear combination, that family of functions can be used as prior means for :math:`g_j(x)`.
 
 .. toctree::
    :maxdepth: 1
