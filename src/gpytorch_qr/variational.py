@@ -36,6 +36,11 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
         for center-gap representation.
         If not passed, defaults to a balanced split of the quantiles.
 
+    See Also
+    --------
+    gpytorch_qr.means.CenterGapMean :
+        Mean module for this strategy to place prior mean on latent functions.
+
     Notes
     -----
     This class is introduced to facilitate implementing center-gap model
