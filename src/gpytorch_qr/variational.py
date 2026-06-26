@@ -4,14 +4,20 @@ import gpytorch
 import torch
 
 __all__ = [
-    "CGLmcVariationalStrategy",
+    "CenterGapLMCVariationalStrategy",
 ]
 
 
-class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
-    """LMC variational strategy for the center-gap quantile regression model.
+class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
+    r"""Special LMC variational strategy for the center-gap representation.
 
-    This class allows all gaps to be correlated.
+    This class forces the following structure:
+
+    1. Each central quantile of each output dimension is directly represented by
+       a dedicated independent latent function.
+    2. Gap functions for all output dimensions are represented by
+       linear combinations of the remaining latent functions.
+    3. Only the coefficients for the gap functions are learned.
 
     Parameters
     ----------
@@ -30,10 +36,16 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         for center-gap representation.
         If not passed, defaults to a balanced split of the quantiles.
 
+    See Also
+    --------
+    gpytorch_qr.means.CenterGapMean :
+        Mean module for this strategy to place prior mean on latent functions.
+
     Notes
     -----
-    This class modifies the standard LMC coefficients to fit the center-gap
-    representation with ``k`` outputs.
+    This class is introduced to facilitate implementing center-gap model
+    where the gaps are correlated while the center has prior mean.
+
     The first ``k`` latent functions directly represent the central quantiles of each
     output dimension, and they do not form any linear combinations with the other
     latent functions.
@@ -63,8 +75,16 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
     - ``L_i`` contains pre-softplus-transformed lower gaps for *i*-th output dimension,
     - ``U_i`` contains pre-softplus-transformed upper gaps for *i*-th output dimension.
 
-    Subclass can extend :meth:`construct_lmc_mask` to further restrict the
-    linear combinations.
+    .. hint::
+
+        The limitation of this class is that
+
+        1. It cannot correlate the central quantile and the gap functions.
+        2. It cannot correlate the central quantiles of different output dimensions.
+
+        Should such correlations be desired, one can modify the input observations by
+        :math:`y \leftarrow y - \mu(x)` and use a standard LMC variational strategy to
+        model the residuals.
     """
 
     def __init__(
@@ -109,16 +129,19 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         # lmc_coefficients: (*B, T, Q)
         lmc_coefficients = self.lmc_coefficients.detach().clone()
         del self.lmc_coefficients
-        self.register_parameter(
-            "_lmc_coefficients", torch.nn.Parameter(lmc_coefficients)
-        )
-
         T, Q = lmc_coefficients.shape[-2:]
         k = len(num_quantiles)
         self.register_buffer("lmc_mask", self.construct_lmc_mask(T, Q, k))
 
-    def construct_lmc_mask(self, T, Q, k):
-        """Construct a mask to restrict the LMC structure.
+        self.register_parameter("_lmc_coeff", torch.nn.Parameter(lmc_coefficients))
+        coeff = torch.zeros(T, Q)
+        for i in range(k):
+            coeff[i, i] = 1.0
+        self.register_buffer("_fixed_coeff", coeff)
+
+    @classmethod
+    def construct_lmc_mask(cls, T, Q, k):
+        """Construct a mask to restrict the learnable LMC coefficients.
 
         Parameters
         ----------
@@ -132,16 +155,13 @@ class CGLmcVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
         Returns
         -------
         lmc_mask : torch.Tensor with shape ``(T, Q)``
-            A binary mask of the same shape as the LMC coefficients, where 1
-            indicates the positions of the LMC coefficients to be learned, and 0
-            indicates the positions of the LMC coefficients to be fixed at 0.
+            A binary mask of the same shape as the LMC coefficients.
+            1 indicates learnable coefficients, and 0 indicates fixed coefficients.
         """
         mask = torch.zeros(T, Q)
-        for i in range(k):
-            mask[i, i] = 1  # Central quantiles
         mask[k:, k:] = 1  # Gap functions
         return mask
 
     @property
     def lmc_coefficients(self):
-        return self._lmc_coefficients * self.lmc_mask
+        return self._lmc_coeff * self.lmc_mask + self._fixed_coeff

@@ -299,7 +299,7 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
     >>> from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
-    >>> from gpytorch_qr.variational import CGLmcVariationalStrategy
+    >>> from gpytorch_qr.variational import CenterGapLMCVariationalStrategy
     >>> class MyGP(CenterGapQuantileGP):
     ...     def __init__(
     ...         self,
@@ -313,7 +313,7 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     ...             N,
     ...             batch_shape=torch.Size([num_latents]),
     ...         )
-    ...         var_strat = CGLmcVariationalStrategy(
+    ...         var_strat = CenterGapLMCVariationalStrategy(
     ...             VariationalStrategy(
     ...                 self,
     ...                 inducing_points,
