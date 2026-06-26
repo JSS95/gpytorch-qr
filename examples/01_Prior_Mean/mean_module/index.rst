@@ -10,7 +10,7 @@ Refer to :ref:`basic-usage` for more details on representation and correlation s
 Direct representation
 ---------------------
 
-If quantile functions :math:`Q_{\tau_i}(x)` are directly represented and uncorrelated, prior means :math:`\mu_i(x)` can be individually set for each latent GP :math:`g_i(x)`.
+If quantile functions :math:`Q_{\tau_i}(x)` are directly represented and independent, prior means :math:`\mu_i(x)` can be individually set for each latent GP :math:`g_i(x)`.
 
 If quantile functions :math:`Q_{\tau_i}(x)` are directly represented but correlated, their prior means cannot be directly set.
 However, if the desired prior means of :math:`Q_{\tau_i}(x)` are members of a family of functions that is closed to linear combination, that family of functions can be used as prior means for :math:`g_j(x)`.
