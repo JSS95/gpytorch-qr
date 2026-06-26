@@ -6,26 +6,24 @@ Basic Usage
 There are two design choices for GPQR:
 
 1. Quantile representation (direct vs. center-gap)
-2. Correlation between different latent GPs (independent vs. correlated)
+2. Correlation structure (independent vs. correlated)
 
 .. rubric:: Quantile representation
 
 Quantiles can be represented either directly or by a center-gap representation.
 
 In direct representation, latent GPs directly model quantiles.
+This method is more flexible but can suffer from quantile crossing.
 
-In center-gap representation, one latent GP models the central quantile and the rest of the latent GPs model the gaps between adjacent quantiles.
+In center-gap representation, latent GPs model the central quantile and the gaps between adjacent quantiles.
 The quantiles are then constructed by cumulatively adding the positive gaps to the central quantile, preventing quantile crossing.
 
-The direct representation is more flexible but can suffer from quantile crossing, while the center-gap representation has more inductive bias and prevents quantile crossing.
-
-.. rubric:: Correlation between different quantiles
+.. rubric:: Correlation structure
 
 If quantiles are directly represented, their correlations can be modeled by LMC structure of the latent GPs.
 
 If center-gap representation is used, quantiles are naturally correlated by the additive structure.
-Allowing LMC structure between latent GPs models the correlation between gaps.
-For this purpose, we provide special LMC classes.
+Allowing LMC structure between latent GPs additionally models the correlation between gaps.
 
 .. toctree::
    :maxdepth: 1

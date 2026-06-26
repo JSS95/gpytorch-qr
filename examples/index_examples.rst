@@ -6,4 +6,4 @@ Examples
    :glob:
    :maxdepth: 2
 
-   ./**/index
+   ./*/index
