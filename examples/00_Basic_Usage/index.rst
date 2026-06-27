@@ -53,7 +53,6 @@ For direct representation, uncorrelated GP output means that :math:`Q_{\tau_i}(x
 For center-gap representation, :math:`Q_{\tau_i}(x)` are always correlated by the additive structure.
 Here, correlation between :math:`f_i(x)` dictates correlation between gaps :math:`\Delta Q_i(x)`.
 
-
 .. toctree::
    :maxdepth: 1
    :caption: Independent GPs
