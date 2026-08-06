@@ -20,7 +20,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: build
-          image: ubuntu:latest
+          image: python:3.13
           imagePullPolicy: Always
           workingDir: /workspace
           resources:
@@ -41,3 +41,8 @@ spec:
               git remote add origin "${GIT_REPOSITORY}"
               git fetch --depth 1 origin "${GIT_SHA}"
               git checkout --detach FETCH_HEAD
+
+              pip install .[doc]
+              export GPYTORCHQR_N_EPOCHS=1
+              jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
+              jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb

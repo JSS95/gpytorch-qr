@@ -54,7 +54,7 @@ git config filter.nbstripout.required true
 Set the `GPYTORCH_N_EPOCHS` environment variable to `1` for quickly test notebook build.
 
 ```sh
-export GPYTORCH_N_EPOCH=1
+export GPYTORCHQR_N_EPOCHS=1
 jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
 jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
 ```
