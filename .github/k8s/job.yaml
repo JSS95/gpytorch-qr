@@ -22,6 +22,7 @@ spec:
         - name: build
           image: ubuntu:latest
           imagePullPolicy: Always
+          workingDir: /workspace
           resources:
             requests:
               memory: "16Gi"
@@ -31,4 +32,12 @@ spec:
               memory: "16Gi"
               cpu: "${CPU_REQUEST}"
               nvidia.com/gpu: "${GPU_REQUEST}"
-          command: ["echo", "Hello World"]
+          command: ["bash", "-euc"]
+          args:
+            - |
+              apt-get update
+              apt-get install -y --no-install-recommends ca-certificates git
+              git init .
+              git remote add origin "${GIT_REPOSITORY}"
+              git fetch --depth 1 origin "${GIT_SHA}"
+              git checkout --detach FETCH_HEAD
