@@ -33,12 +33,36 @@ jobs:
           echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
+      - name: Create GitHub app secret
+        env:
+          GH_APP_ID: ${{ secrets.GH_APP_ID }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}
+          KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
+        run: |
+          if [ -z "$GH_APP_ID" ]; then
+            echo "::error::Missing GH_APP_ID secret for GitHub check runs and documentation branch pushes."
+            exit 1
+          fi
+          if [ -z "$GH_APP_PRIVATE_KEY" ]; then
+            echo "::error::Missing GH_APP_PRIVATE_KEY secret for GitHub check runs and documentation branch pushes."
+            exit 1
+          fi
+
+          kubectl create secret generic github-app \
+            --from-literal=GH_APP_ID="$GH_APP_ID" \
+            --from-literal=GH_APP_PRIVATE_KEY="$GH_APP_PRIVATE_KEY" \
+            --from-literal=GH_APP_INSTALLATION_ID="$GH_APP_INSTALLATION_ID" \
+            --namespace="$KUBE_NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy to Kubernetes
         shell: bash
         env:
           GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GIT_REPOSITORY: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
-          GIT_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}

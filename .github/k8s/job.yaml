@@ -38,13 +38,37 @@ spec:
               apt-get update
               apt-get install -y --no-install-recommends ca-certificates git
               git init .
-              git remote add origin "${GIT_REPOSITORY}"
+              git remote add origin "${GITHUB_REPOSITORY}"
               git fetch --depth 1 origin "${GIT_SHA}"
               git checkout --detach FETCH_HEAD
 
               pip install .[doc]
-              if [ "${GIT_EVENT_NAME}" = "pull_request" ]; then
+
+              if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
                 export GPYTORCHQR_N_EPOCHS=1
               fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
+          env:
+            - name: GH_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_ID
+            - name: GH_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_PRIVATE_KEY
+            - name: GH_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_INSTALLATION_ID
+                  optional: true
+            - name: GITHUB_REPOSITORY
+              value: "${GITHUB_REPOSITORY}"
+            - name: GIT_SHA
+              value: "${GIT_SHA}"
+            - name: GITHUB_EVENT_NAME
+              value: "${GITHUB_EVENT_NAME}"
