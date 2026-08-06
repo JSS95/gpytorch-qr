@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${KUBE_NAMESPACE}
+  annotations:
+    creator: "${KUBE_USERNAME}"
+spec:
+  ttlSecondsAfterFinished: ${TTL_SECONDS_AFTER_FINISHED}
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+        creator: "${KUBE_USERNAME}"
+    spec:
+      nodeSelector:
+          mlx.navercorp.com/zone: ${MLXP_ZONE}
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: build
+          image: ubuntu:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: "16Gi"
+              cpu: "${CPU_REQUEST}"
+              nvidia.com/gpu: "${GPU_REQUEST}"
+            limits:
+              memory: "16Gi"
+              cpu: "${CPU_REQUEST}"
+              nvidia.com/gpu: "${GPU_REQUEST}"
+          command: ["echo", "Hello World"]

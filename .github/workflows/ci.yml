@@ -10,8 +10,8 @@ jobs:
 
     steps:
 
-      - name: get repo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: set up Python
         uses: actions/setup-python@v4
@@ -47,8 +47,8 @@ jobs:
 
     steps:
 
-      - name: get repo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: set up Python
         uses: actions/setup-python@v4
@@ -63,50 +63,50 @@ jobs:
 
   find-notebooks:
 
-      needs: lint
+    needs: lint
 
-      runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-      outputs:
-        notebooks: ${{ steps.list.outputs.notebooks }}
+    outputs:
+      notebooks: ${{ steps.list.outputs.notebooks }}
 
-      steps:
+    steps:
 
-        - name: get repo
-          uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: list notebooks
-          id: list
-          run: |
-            notebooks=$(find examples -name "*.ipynb" | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
-            echo "notebooks=$notebooks" >> $GITHUB_OUTPUT
+      - name: list notebooks
+        id: list
+        run: |
+          notebooks=$(find examples -name "*.ipynb" | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "notebooks=$notebooks" >> $GITHUB_OUTPUT
 
   examples:
 
-      needs: find-notebooks
+    needs: find-notebooks
 
-      runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-      strategy:
-        fail-fast: false
-        matrix:
-          notebook: ${{ fromJson(needs.find-notebooks.outputs.notebooks) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        notebook: ${{ fromJson(needs.find-notebooks.outputs.notebooks) }}
 
-      steps:
+    steps:
 
-        - name: get repo
-          uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: set up Python
-          uses: actions/setup-python@v4
-          with:
-            python-version: "3.12"
+      - name: set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
 
-        - name: install package
-          run: |
-            pip install .[test]
+      - name: install package
+        run: |
+          pip install .[test]
 
-        - run: GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --execute --to notebook --stdout ${{ matrix.notebook }} > /dev/null
+      - run: GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --execute --to notebook --stdout ${{ matrix.notebook }} > /dev/null
 
   doc:
 
@@ -116,8 +116,8 @@ jobs:
 
     steps:
 
-      - name: get repo
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: set up Python
         uses: actions/setup-python@v4

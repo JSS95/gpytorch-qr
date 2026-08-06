@@ -33,6 +33,30 @@ jobs:
           echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
           chmod 600 $HOME/.kube/config
 
+      - name: Deploy to Kubernetes
+        shell: bash
+        env:
+          GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
+          KUBE_USERNAME: ${{ secrets.KUBE_USERNAME }}
+          TTL_SECONDS_AFTER_FINISHED: ${{ vars.TTL_SECONDS_AFTER_FINISHED }}
+          MLXP_ZONE: ${{ secrets.MLXP_ZONE }}
+          CPU_REQUEST: ${{ vars.CPU_REQUEST }}
+          GPU_REQUEST: ${{ vars.GPU_REQUEST }}
+        run: |
+          job_name="gpytorch_qr-${GIT_SHA::7}-${{ github.event_name }}-${RUN_ID}-${RUN_ATTEMPT}"
+          export JOB_NAME="$job_name"
+          template_vars="$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' .github/k8s/job.yaml | sort -u | tr '\n' ' ')"
+          envsubst "$template_vars" < .github/k8s/job.yaml | kubectl apply -f -
+          kubectl wait \
+            --namespace="$KUBE_NAMESPACE" \
+            --for=create \
+            "pod" \
+            --selector="job-name=${job_name}" \
+            --timeout=120s
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
