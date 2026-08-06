@@ -38,19 +38,23 @@ Document will be generated in `build/html` directory. Open `index.html` to see t
 
 For development features, you must install the package by `pip install -e .[dev]`.
 
-### Re-building examples
+### Configuring git
 
 Configure the local git filter (run once after cloning):
 
-```
-git config filter.nbstripout.clean "nbstripout --keep-output --keep-metadata-keys 'metadata.language_info'"
+```sh
+nbstripout --install --attributes .gitattributes
+git config filter.nbstripout.clean "nbstripout"
 git config filter.nbstripout.smudge cat
 git config filter.nbstripout.required true
 ```
 
-Then build the examples:
+### Testing notebook build
 
-```
+Set the `GPYTORCH_N_EPOCHS` environment variable to `1` for quickly test notebook build.
+
+```sh
+export GPYTORCH_N_EPOCH=1
 jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
 jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
 ```
