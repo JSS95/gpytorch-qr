@@ -38,6 +38,7 @@ jobs:
         env:
           GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GIT_REPOSITORY: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
+          GIT_EVENT_NAME: ${{ github.event_name }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}

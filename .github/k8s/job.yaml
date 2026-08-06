@@ -43,6 +43,8 @@ spec:
               git checkout --detach FETCH_HEAD
 
               pip install .[doc]
-              export GPYTORCHQR_N_EPOCHS=1
+              if [ "${GIT_EVENT_NAME}" = "pull_request" ]; then
+                export GPYTORCHQR_N_EPOCHS=1
+              fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
