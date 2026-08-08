@@ -8,7 +8,7 @@ check_conclusion="${2:-}"
 check_title="${3:-}"
 check_summary="${4:-$check_title}"
 
-source .github/k8s/app-token.sh
+source .github/scripts/app-token.sh
 
 if [ -z "${GITHUB_CHECK_RUN_ID:-}" ]; then
   if [ -z "${GIT_SHA:-}" ] || [ -z "${GITHUB_CHECK_RUN_NAME:-}" ]; then

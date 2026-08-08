@@ -7,7 +7,7 @@ if [ -z "${PUBLISH_DOC_CHECK_RUN_ID:-}" ]; then
   exit 1
 fi
 
-source .github/k8s/app-token.sh
+source .github/scripts/app-token.sh
 
 dispatch_payload="$(python -c '
 import json

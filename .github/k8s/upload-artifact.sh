@@ -16,7 +16,7 @@ archive_file="$(mktemp --suffix=.tar.gz)"
 trap 'rm -f "$archive_file"' EXIT
 
 tar -C examples -czf "$archive_file" .
-source .github/k8s/app-token.sh
+source .github/scripts/app-token.sh
 
 existing_asset_id="$(curl --fail --silent --show-error \
   --header "Authorization: Bearer $installation_token" \
