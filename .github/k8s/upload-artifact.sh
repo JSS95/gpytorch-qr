@@ -1,6 +1,4 @@
 required_variables=(
-  GH_APP_ID
-  GH_APP_PRIVATE_KEY
   GITHUB_REPOSITORY
   GITHUB_RELEASE_ID
   GITHUB_RELEASE_TAG_NAME
@@ -15,29 +13,10 @@ done
 
 asset_name="examples-${GITHUB_RELEASE_TAG_NAME}.tar.gz"
 archive_file="$(mktemp --suffix=.tar.gz)"
-private_key_file="$(mktemp)"
-trap 'rm -f "$archive_file" "$private_key_file"' EXIT
+trap 'rm -f "$archive_file"' EXIT
 
 tar -C examples -czf "$archive_file" .
-printf '%s' "$GH_APP_PRIVATE_KEY" > "$private_key_file"
-
-issued_at="$(($(date +%s) - 60))"
-expires_at="$((issued_at + 540))"
-jwt_header="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-jwt_payload="$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$issued_at" "$expires_at" "$GH_APP_ID" | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-jwt_signature="$(printf '%s' "$jwt_header.$jwt_payload" | openssl dgst -sha256 -sign "$private_key_file" | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-app_jwt="$jwt_header.$jwt_payload.$jwt_signature"
-
-installation_id="$(curl --fail --silent --show-error \
-  --header "Authorization: Bearer $app_jwt" \
-  --header 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/${GITHUB_REPOSITORY}/installation" | \
-  python -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
-installation_token="$(curl --fail --silent --show-error --request POST \
-  --header "Authorization: Bearer $app_jwt" \
-  --header 'Accept: application/vnd.github+json' \
-  "https://api.github.com/app/installations/${installation_id}/access_tokens" | \
-  python -c 'import json, sys; print(json.load(sys.stdin)["token"])')"
+source .github/k8s/app-token.sh
 
 existing_asset_id="$(curl --fail --silent --show-error \
   --header "Authorization: Bearer $installation_token" \

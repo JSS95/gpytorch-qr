@@ -6,25 +6,7 @@ fi
 check_status="$1"
 check_conclusion="$2"
 
-private_key_file="$(mktemp)"
-trap 'rm -f "$private_key_file"' EXIT
-printf '%s' "$GH_APP_PRIVATE_KEY" > "$private_key_file"
-issued_at="$(($(date +%s) - 60))"
-expires_at="$((issued_at + 540))"
-jwt_header="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-jwt_payload="$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$issued_at" "$expires_at" "$GH_APP_ID" | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-jwt_signature="$(printf '%s' "$jwt_header.$jwt_payload" | openssl dgst -sha256 -sign "$private_key_file" | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
-app_jwt="$jwt_header.$jwt_payload.$jwt_signature"
-installation_id="$(curl --fail --silent --show-error \
---header "Authorization: Bearer $app_jwt" \
---header 'Accept: application/vnd.github+json' \
-"https://api.github.com/repos/${GITHUB_REPOSITORY}/installation" | \
-python -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
-installation_token="$(curl --fail --silent --show-error --request POST \
---header "Authorization: Bearer $app_jwt" \
---header 'Accept: application/vnd.github+json' \
-"https://api.github.com/app/installations/${installation_id}/access_tokens" | \
-python -c 'import json, sys; print(json.load(sys.stdin)["token"])')"
+source .github/k8s/app-token.sh
 check_run_data="$(python -c 'import json, sys; print(json.dumps({"status": sys.argv[1], "conclusion": sys.argv[2]}))' "$check_status" "$check_conclusion")"
 curl --fail --silent --show-error --request PATCH \
 --header "Authorization: Bearer $installation_token" \

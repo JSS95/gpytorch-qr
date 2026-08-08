@@ -50,7 +50,6 @@ spec:
               if [ "$GITHUB_EVENT_NAME" = "release" ]; then
                 bash -euo pipefail .github/k8s/upload-artifact.sh
               fi
-
               bash -euo pipefail .github/k8s/check-run.sh completed success
           env:
             - name: GH_APP_ID
