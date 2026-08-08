@@ -1,0 +1,55 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+
+  changelog:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: get repo
+        uses: actions/checkout@v3
+
+      - name: update triggered GitHub release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          changelog_version="${TAG_VERSION#v}"
+          notes_file="$(mktemp)"
+          trap 'rm -f "$notes_file"' EXIT
+          python .github/scripts/parse-changelog.py "$changelog_version" > "$notes_file"
+          gh release edit "$TAG_VERSION" --notes-file "$notes_file"
+
+  pypi:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: get repo
+        uses: actions/checkout@v3
+
+      - name: set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: build package
+        run: |
+          pip install build
+          python -m build
+
+      - name: publish to PyPI
+        run: |
+          pip install twine
+          pip install -U packaging
+          twine upload dist/* -u __token__ -p ${{ secrets.pypi_token }}
