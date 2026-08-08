@@ -9,6 +9,50 @@ permissions:
 
 jobs:
 
+  documentation-check:
+
+    runs-on: ubuntu-latest
+    outputs:
+      check-run-id: ${{ steps.check.outputs.check-run-id }}
+
+    steps:
+
+      - name: Create GitHub App token for checks
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          permission-checks: write
+
+      - name: Create publish doc check
+        id: check
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+            const { data: check } = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'publish doc',
+              head_sha: context.sha,
+              status: 'queued',
+              output: {
+                title: 'Documentation build is queued',
+                summary: `- ${timestamp} — Waiting for the Kubernetes release job (status=queued)`,
+              },
+            });
+            core.setOutput('check-run-id', String(check.id));
+
+  deploy:
+
+    needs: documentation-check
+    uses: ./.github/workflows/deploy.yml
+    with:
+      publish_doc_check_run_id: ${{ needs.documentation-check.outputs.check-run-id }}
+    secrets: inherit
+
   changelog:
 
     runs-on: ubuntu-latest

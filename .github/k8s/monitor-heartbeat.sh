@@ -1,7 +1,7 @@
 heartbeat_dir="${HEARTBEAT_DIR:-/heartbeat}"
 
 finalize_check() {
-  bash -euo pipefail .github/k8s/check-run.sh "$@"
+  bash -euo pipefail .github/scripts/check-run.sh "$@"
   touch "$heartbeat_dir/check-finalized"
 }
 

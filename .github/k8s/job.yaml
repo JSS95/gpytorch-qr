@@ -61,7 +61,7 @@ spec:
               git checkout --detach FETCH_HEAD
 
               if [ ! -f /heartbeat/check-started ]; then
-                bash -euo pipefail .github/k8s/check-run.sh in_progress "" "Job has started"
+                bash -euo pipefail .github/scripts/check-run.sh in_progress "" "Job has started"
                 touch /heartbeat/check-started
               fi
               touch /heartbeat/sidecar-ready
@@ -122,6 +122,13 @@ spec:
               mark_check_as_failed() {
                 exit_code=$?
                 trap - ERR
+                if [ "$GITHUB_EVENT_NAME" = "release" ] && \
+                   [ -n "$PUBLISH_DOC_CHECK_RUN_ID" ] && \
+                   [ ! -f /heartbeat/doc-dispatched ]; then
+                  GITHUB_CHECK_RUN_ID="$PUBLISH_DOC_CHECK_RUN_ID" \
+                    bash -euo pipefail .github/scripts/check-run.sh \
+                      completed failure "Documentation build was not dispatched" || true
+                fi
                 bash -euo pipefail .github/k8s/build-heartbeat.sh finish failure "$heartbeat_pid" || true
                 exit "$exit_code"
               }
@@ -145,6 +152,7 @@ spec:
               if [ "$GITHUB_EVENT_NAME" = "release" ]; then
                 bash -euo pipefail .github/k8s/upload-artifact.sh
                 bash -euo pipefail .github/k8s/dispatch-doc.sh
+                touch /heartbeat/doc-dispatched
               fi
               bash -euo pipefail .github/k8s/build-heartbeat.sh finish success "$heartbeat_pid"
           env:
@@ -176,3 +184,5 @@ spec:
               value: "${GITHUB_RELEASE_TAG_NAME}"
             - name: GITHUB_CHECK_RUN_ID
               value: "${GITHUB_CHECK_RUN_ID}"
+            - name: PUBLISH_DOC_CHECK_RUN_ID
+              value: "${PUBLISH_DOC_CHECK_RUN_ID}"
