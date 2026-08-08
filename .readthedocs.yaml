@@ -10,7 +10,7 @@ build:
         if [ "$READTHEDOCS_VERSION_TYPE" = "tag" ]; then
           release_tag="$READTHEDOCS_GIT_IDENTIFIER"
           archive_file="$(mktemp --suffix=.tar.gz)"
-          trap 'rm -f "$archive_file"' 0
+          trap "rm -f \"$archive_file\"" 0
           curl --fail --location --silent --show-error \
             --output "$archive_file" \
             "https://github.com/JSS95/gpytorch-qr/releases/download/${release_tag}/examples-${release_tag}.tar.gz"
