@@ -127,7 +127,7 @@ spec:
                    [ ! -f /heartbeat/doc-dispatched ]; then
                   GITHUB_CHECK_RUN_ID="$PUBLISH_DOC_CHECK_RUN_ID" \
                     bash -euo pipefail .github/scripts/check-run.sh \
-                      completed failure "Documentation build was not dispatched" || true
+                      completed failure "Build failed" || true
                 fi
                 bash -euo pipefail .github/k8s/build-heartbeat.sh finish failure "$heartbeat_pid" || true
                 exit "$exit_code"
@@ -148,6 +148,8 @@ spec:
               fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
+              bash -euo pipefail .github/scripts/check-run.sh \
+                in_progress "" "Build succeeded"
 
               if [ "$GITHUB_EVENT_NAME" = "release" ]; then
                 bash -euo pipefail .github/k8s/retry.sh "Artifact upload" \

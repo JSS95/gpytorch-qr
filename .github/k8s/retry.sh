@@ -31,6 +31,17 @@ while true; do
     exit "$exit_code"
   fi
 
+  retry_message="${step_name} is being retried (attempt ${attempt}"
+  if [ -n "$max_attempts" ]; then
+    retry_message="${retry_message}/${max_attempts}"
+  fi
+  retry_message="${retry_message})."
+  if [ -n "${GITHUB_CHECK_RUN_ID:-}" ] && \
+     ! bash -euo pipefail .github/scripts/check-run.sh \
+       in_progress "" "Retrying ${step_name}" "$retry_message"; then
+    echo "Could not update the check run for ${retry_message}" >&2
+  fi
+
   if [ -n "$max_attempts" ]; then
     echo "${step_name} failed (attempt ${attempt}/${max_attempts}); retrying in 5 seconds" >&2
   else
