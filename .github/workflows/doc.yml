@@ -3,6 +3,12 @@ name: Publish documentation
 on:
   repository_dispatch:
     types: [build-release-docs]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish documentation for
+        required: true
+        type: string
 
 permissions: {}
 
@@ -13,8 +19,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.client_payload.release_tag }}
 
       - name: Mark publish doc check as in progress
+        if: github.event_name == 'repository_dispatch'
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -22,46 +31,53 @@ jobs:
           GITHUB_CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
         run: bash -euo pipefail .github/scripts/check-run.sh in_progress "" "Read the Docs build has started"
 
+      - name: Sync Read the Docs versions
+        env:
+          READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
+        run: |
+          curl --fail-with-body \
+            -X POST \
+            -H "Authorization: Token ${{ secrets.READTHEDOCS_TOKEN }}" \
+            "https://app.readthedocs.org/api/v3/projects/gpytorch-qr/sync-versions/"
+
+      - name: Wait for Read the Docs version to be created
+        env:
+          READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.client_payload.release_tag }}
+        run: |
+            for i in {1..30}; do
+              RESPONSE=$(curl --fail-with-body -sS \
+                -H "Authorization: Token $READTHEDOCS_TOKEN" \
+                --get \
+                --data-urlencode "verbose_name=$RELEASE_TAG" \
+                --data-urlencode "type=tag" \
+                "https://app.readthedocs.org/api/v3/projects/gpytorch-qr/versions/")
+
+              SLUG=$(echo "$RESPONSE" | jq -r '.results[0].slug // empty')
+
+              if [ -n "$SLUG" ]; then
+                echo "RTD version created: $RELEASE_TAG -> $SLUG"
+                break
+              fi
+
+              echo "Waiting for RTD version sync..."
+              sleep 5
+            done
+
+            if [ -z "$SLUG" ]; then
+              echo "RTD version was not created"
+              exit 1
+            fi
+
       - name: Trigger Read the Docs build
         id: trigger-read-the-docs
         env:
           READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
-          RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.client_payload.release_tag }}
         run: |
-          if [ -z "$READTHEDOCS_TOKEN" ]; then
-            echo "::error::Missing READTHEDOCS_TOKEN secret."
-            exit 1
-          fi
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "::error::Missing release_tag repository dispatch payload."
-            exit 1
-          fi
-
-          encoded_tag="$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$RELEASE_TAG")"
-          project_url="https://app.readthedocs.org/api/v3/projects/gpytorch-qr"
-
-          curl --fail --silent --show-error --request POST \
-            --header "Authorization: Token $READTHEDOCS_TOKEN" \
-            "$project_url/sync-versions/"
-
-          version_url="$project_url/versions/${encoded_tag}/"
-          for attempt in {1..30}; do
-            version_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-              --header "Authorization: Token $READTHEDOCS_TOKEN" \
-              "$version_url")"
-            if [ "$version_status" = 200 ]; then
-              break
-            fi
-            if [ "$attempt" = 30 ]; then
-              echo "::error::Read the Docs version '$RELEASE_TAG' was not created after syncing."
-              exit 1
-            fi
-            sleep 2
-          done
-
           build_response="$(curl --fail --silent --show-error --request POST \
             --header "Authorization: Token $READTHEDOCS_TOKEN" \
-            "$version_url/builds/")"
+            "https://app.readthedocs.org/api/v3/projects/gpytorch-qr/versions/${RELEASE_TAG}/builds/")"
           build_id="$(python -c '
           import json
           import re
@@ -118,7 +134,7 @@ jobs:
           exit 1
 
       - name: Mark publish doc check as successful
-        if: success()
+        if: success() && github.event_name == 'repository_dispatch'
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -127,7 +143,7 @@ jobs:
         run: bash -euo pipefail .github/scripts/check-run.sh completed success "Documentation published"
 
       - name: Mark publish doc check as failed
-        if: failure()
+        if: failure() && github.event_name == 'repository_dispatch'
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
