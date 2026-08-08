@@ -40,7 +40,11 @@ jobs:
               repo: context.repo.repo,
               name: 'k8s',
               head_sha: context.payload.pull_request?.head?.sha ?? context.sha,
-              status: 'in_progress',
+              status: 'queued',
+              output: {
+                title: 'Job is queued',
+                summary: 'Waiting for the Kubernetes Job to start.',
+              },
             });
             core.setOutput('k8s-check-run-id', String(check.id));
 

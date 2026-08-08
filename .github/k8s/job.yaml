@@ -18,20 +18,122 @@ spec:
           mlx.navercorp.com/zone: ${MLXP_ZONE}
       restartPolicy: Never
       terminationGracePeriodSeconds: 600
-      containers:
-        - name: build
+      volumes:
+        - name: heartbeat
+          emptyDir: {}
+      initContainers:
+        - name: check-monitor
           image: python:3.13
           imagePullPolicy: Always
-          workingDir: /workspace
+          restartPolicy: Always
+          workingDir: /sidecar
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: heartbeat
+              mountPath: /heartbeat
+          startupProbe:
+            exec:
+              command: ["/usr/bin/test", "-f", "/heartbeat/sidecar-ready"]
+            periodSeconds: 5
+            failureThreshold: 60
           lifecycle:
             preStop:
               exec:
                 command:
                   - /bin/bash
-                  - -c
+                  - -euc
                   - |
-                    cd /workspace
-                    bash -euo pipefail .github/k8s/check-run.sh completed cancelled
+                    if [ -f /heartbeat/check-finalized ]; then
+                      exit 0
+                    elif [ -f /heartbeat/build-cancelled ]; then
+                      bash -euo pipefail .github/k8s/check-run.sh completed cancelled "Job was cancelled"
+                    elif [ -f /heartbeat/build-success ]; then
+                      bash -euo pipefail .github/k8s/check-run.sh completed success "Build completed successfully"
+                    else
+                      bash -euo pipefail .github/k8s/check-run.sh completed failure "Build stopped"
+                    fi
+                    touch /heartbeat/check-finalized
+          command: ["bash", "-euc"]
+          args:
+            - |
+              apt-get update
+              apt-get install -y --no-install-recommends ca-certificates curl git openssl
+              git init .
+              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git fetch --depth 1 origin "${GIT_SHA}"
+              git checkout --detach FETCH_HEAD
+
+              if [ ! -f /heartbeat/check-started ]; then
+                bash -euo pipefail .github/k8s/check-run.sh in_progress "" "Job has started"
+                touch /heartbeat/check-started
+              fi
+              touch /heartbeat/sidecar-ready
+
+              complete_check() {
+                bash -euo pipefail .github/k8s/check-run.sh "$@"
+                touch /heartbeat/check-finalized
+              }
+
+              while true; do
+                if [ -f /heartbeat/check-finalized ]; then
+                  sleep 5
+                elif [ -f /heartbeat/build-cancelled ]; then
+                  complete_check completed cancelled "Job was cancelled"
+                elif [ -f /heartbeat/build-failure ]; then
+                  complete_check completed failure "Build container failed"
+                elif [ -f /heartbeat/build-success ]; then
+                  complete_check completed success "Build completed successfully"
+                elif [ -f /heartbeat/build-started ] && [ -f /heartbeat/build-heartbeat ]; then
+                  heartbeat_age="$(($(date +%s) - $(stat -c %Y /heartbeat/build-heartbeat)))"
+                  if [ "$heartbeat_age" -gt 90 ]; then
+                    complete_check completed failure "Build stopped"
+                  fi
+                fi
+                sleep 5
+              done
+          env:
+            - name: GH_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_ID
+            - name: GH_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_PRIVATE_KEY
+            - name: GITHUB_REPOSITORY
+              value: "${GITHUB_REPOSITORY}"
+            - name: GIT_SHA
+              value: "${GIT_SHA}"
+            - name: GITHUB_CHECK_RUN_ID
+              value: "${GITHUB_CHECK_RUN_ID}"
+      containers:
+        - name: build
+          image: python:3.13
+          imagePullPolicy: Always
+          workingDir: /workspace
+          volumeMounts:
+            - name: heartbeat
+              mountPath: /heartbeat
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -euc
+                  - |
+                    touch /heartbeat/build-cancelled
+                    for _ in $(seq 1 60); do
+                      [ -f /heartbeat/check-finalized ] && exit 0
+                      sleep 1
+                    done
           resources:
             requests:
               memory: "16Gi"
@@ -44,6 +146,31 @@ spec:
           command: ["bash", "-euc"]
           args:
             - |
+              touch /heartbeat/build-started
+              while true; do
+                touch /heartbeat/build-heartbeat
+                sleep 15
+              done &
+              heartbeat_pid=$!
+
+              wait_for_check_finalization() {
+                for _ in $(seq 1 60); do
+                  [ -f /heartbeat/check-finalized ] && return 0
+                  sleep 1
+                done
+                return 1
+              }
+
+              mark_check_as_failed() {
+                exit_code=$?
+                trap - ERR
+                kill "$heartbeat_pid" 2>/dev/null || true
+                touch /heartbeat/build-failure
+                wait_for_check_finalization || true
+                exit "$exit_code"
+              }
+              trap mark_check_as_failed ERR
+
               apt-get update
               apt-get install -y --no-install-recommends ca-certificates curl git gzip openssl tar
               git init .
@@ -62,7 +189,9 @@ spec:
               if [ "$GITHUB_EVENT_NAME" = "release" ]; then
                 bash -euo pipefail .github/k8s/upload-artifact.sh
               fi
-              bash -euo pipefail .github/k8s/check-run.sh completed success
+              kill "$heartbeat_pid"
+              touch /heartbeat/build-success
+              wait_for_check_finalization
           env:
             - name: GH_APP_ID
               valueFrom:
