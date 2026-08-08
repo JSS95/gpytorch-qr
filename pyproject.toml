@@ -43,14 +43,14 @@ test = [
     "pytest",
     "pytest-doctestplus",
     "matplotlib",
-    "nbconvert",
-    "ipykernel",
 ]
 doc = [
+    "matplotlib",
+    "nbconvert",
+    "ipykernel",
     "sphinx",
     "numpydoc",
     "pydata_sphinx_theme",
-    "matplotlib",
     "myst-nb",
     "scikit-learn",
     "pytest-doctestplus",

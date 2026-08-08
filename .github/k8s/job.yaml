@@ -1,0 +1,178 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+  namespace: ${KUBE_NAMESPACE}
+  annotations:
+    creator: "${KUBE_USERNAME}"
+spec:
+  ttlSecondsAfterFinished: ${TTL_SECONDS_AFTER_FINISHED}
+  backoffLimit: 0
+  template:
+    metadata:
+      annotations:
+        sidecar.istio.io/inject: "false"
+        creator: "${KUBE_USERNAME}"
+    spec:
+      nodeSelector:
+          mlx.navercorp.com/zone: ${MLXP_ZONE}
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 600
+      volumes:
+        - name: heartbeat
+          emptyDir: {}
+      initContainers:
+        - name: check-monitor
+          image: python:3.13
+          imagePullPolicy: Always
+          restartPolicy: Always
+          workingDir: /sidecar
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: heartbeat
+              mountPath: /heartbeat
+          startupProbe:
+            exec:
+              command: ["/usr/bin/test", "-f", "/heartbeat/sidecar-ready"]
+            periodSeconds: 5
+            failureThreshold: 60
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -euc
+                  - |
+                    bash -euo pipefail .github/k8s/monitor-heartbeat.sh
+          command: ["bash", "-euc"]
+          args:
+            - |
+              apt-get update
+              apt-get install -y --no-install-recommends ca-certificates curl git openssl
+              git init .
+              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git fetch --depth 1 origin "${GIT_SHA}"
+              git checkout --detach FETCH_HEAD
+
+              if [ ! -f /heartbeat/check-started ]; then
+                bash -euo pipefail .github/k8s/check-run.sh in_progress "" "Job has started"
+                touch /heartbeat/check-started
+              fi
+              touch /heartbeat/sidecar-ready
+
+              while true; do
+                bash -euo pipefail .github/k8s/monitor-heartbeat.sh
+                sleep 5
+              done
+          env:
+            - name: GH_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_ID
+            - name: GH_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_PRIVATE_KEY
+            - name: GITHUB_REPOSITORY
+              value: "${GITHUB_REPOSITORY}"
+            - name: GIT_SHA
+              value: "${GIT_SHA}"
+            - name: GITHUB_CHECK_RUN_ID
+              value: "${GITHUB_CHECK_RUN_ID}"
+      containers:
+        - name: build
+          image: python:3.13
+          imagePullPolicy: Always
+          workingDir: /workspace
+          volumeMounts:
+            - name: heartbeat
+              mountPath: /heartbeat
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -euc
+                  - |
+                    cd /workspace
+                    bash -euo pipefail .github/k8s/build-heartbeat.sh finish cancelled
+          resources:
+            requests:
+              memory: "16Gi"
+              cpu: "${CPU_REQUEST}"
+              nvidia.com/gpu: "${GPU_REQUEST}"
+            limits:
+              memory: "16Gi"
+              cpu: "${CPU_REQUEST}"
+              nvidia.com/gpu: "${GPU_REQUEST}"
+          command: ["bash", "-euc"]
+          args:
+            - |
+              bash -euo pipefail .github/k8s/build-heartbeat.sh start &
+              heartbeat_pid=$!
+
+              mark_check_as_failed() {
+                exit_code=$?
+                trap - ERR
+                bash -euo pipefail .github/k8s/build-heartbeat.sh finish failure "$heartbeat_pid" || true
+                exit "$exit_code"
+              }
+              trap mark_check_as_failed ERR
+
+              apt-get update
+              apt-get install -y --no-install-recommends ca-certificates curl git gzip openssl tar
+              git init .
+              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git fetch --depth 1 origin "${GIT_SHA}"
+              git checkout --detach FETCH_HEAD
+
+              pip install .[doc]
+
+              if [ "${GITHUB_EVENT_NAME}" != "release" ]; then
+                export GPYTORCHQR_N_EPOCHS=1
+              fi
+              jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
+              jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
+
+              if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+                bash -euo pipefail .github/k8s/upload-artifact.sh
+                bash -euo pipefail .github/k8s/dispatch-doc.sh
+              fi
+              bash -euo pipefail .github/k8s/build-heartbeat.sh finish success "$heartbeat_pid"
+          env:
+            - name: GH_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_ID
+            - name: GH_APP_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_PRIVATE_KEY
+            - name: GH_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: github-app
+                  key: GH_APP_INSTALLATION_ID
+                  optional: true
+            - name: GITHUB_REPOSITORY
+              value: "${GITHUB_REPOSITORY}"
+            - name: GIT_SHA
+              value: "${GIT_SHA}"
+            - name: GITHUB_EVENT_NAME
+              value: "${GITHUB_EVENT_NAME}"
+            - name: GITHUB_RELEASE_ID
+              value: "${GITHUB_RELEASE_ID}"
+            - name: GITHUB_RELEASE_TAG_NAME
+              value: "${GITHUB_RELEASE_TAG_NAME}"
+            - name: GITHUB_CHECK_RUN_ID
+              value: "${GITHUB_CHECK_RUN_ID}"

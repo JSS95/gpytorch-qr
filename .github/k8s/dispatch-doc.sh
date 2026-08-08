@@ -1,0 +1,24 @@
+if [ -z "${GITHUB_RELEASE_TAG_NAME:-}" ]; then
+  echo "Missing required environment variable: GITHUB_RELEASE_TAG_NAME" >&2
+  exit 1
+fi
+
+source .github/k8s/app-token.sh
+
+dispatch_payload="$(python -c '
+import json
+import sys
+
+print(json.dumps({
+    "event_type": "build-release-docs",
+    "client_payload": {"release_tag": sys.argv[1]},
+}))
+' "$GITHUB_RELEASE_TAG_NAME")"
+
+curl --fail --silent --show-error --request POST \
+  --header "Authorization: Bearer $installation_token" \
+  --header 'Accept: application/vnd.github+json' \
+  --header 'Content-Type: application/json' \
+  --header 'X-GitHub-Api-Version: 2022-11-28' \
+  --data "$dispatch_payload" \
+  "https://api.github.com/repos/${GITHUB_REPOSITORY}/dispatches"
