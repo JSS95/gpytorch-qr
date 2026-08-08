@@ -150,8 +150,10 @@ spec:
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
 
               if [ "$GITHUB_EVENT_NAME" = "release" ]; then
-                bash -euo pipefail .github/k8s/upload-artifact.sh
-                bash -euo pipefail .github/k8s/dispatch-doc.sh
+                bash -euo pipefail .github/k8s/retry.sh "Artifact upload" \
+                  bash -euo pipefail .github/k8s/upload-artifact.sh
+                bash -euo pipefail .github/k8s/retry.sh "Documentation dispatch" \
+                  bash -euo pipefail .github/k8s/dispatch-doc.sh
                 touch /heartbeat/doc-dispatched
               fi
               bash -euo pipefail .github/k8s/build-heartbeat.sh finish success "$heartbeat_pid"
