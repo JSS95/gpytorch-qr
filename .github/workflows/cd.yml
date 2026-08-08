@@ -37,7 +37,6 @@ jobs:
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}
           KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
         run: |
           if [ -z "$GH_APP_ID" ]; then
@@ -52,7 +51,6 @@ jobs:
           kubectl create secret generic github-app \
             --from-literal=GH_APP_ID="$GH_APP_ID" \
             --from-literal=GH_APP_PRIVATE_KEY="$GH_APP_PRIVATE_KEY" \
-            --from-literal=GH_APP_INSTALLATION_ID="$GH_APP_INSTALLATION_ID" \
             --namespace="$KUBE_NAMESPACE" \
             --dry-run=client -o yaml | kubectl apply -f -
 
