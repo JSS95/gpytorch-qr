@@ -49,7 +49,7 @@ spec:
               fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
-              bash -euo pipefail .github/k8s/check-run.sh
+              bash -euo pipefail .github/k8s/check-run.sh completed success
 
           env:
             - name: GH_APP_ID
