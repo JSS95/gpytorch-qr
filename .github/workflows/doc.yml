@@ -26,6 +26,27 @@ jobs:
           fi
 
           encoded_tag="$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$RELEASE_TAG")"
+          project_url="https://app.readthedocs.org/api/v3/projects/gpytorch-qr"
+
           curl --fail --silent --show-error --request POST \
             --header "Authorization: Token $READTHEDOCS_TOKEN" \
-            "https://app.readthedocs.org/api/v3/projects/gpytorch-qr/versions/${encoded_tag}/builds/"
+            "$project_url/sync-versions/"
+
+          version_url="$project_url/versions/${encoded_tag}/"
+          for attempt in {1..30}; do
+            version_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Token $READTHEDOCS_TOKEN" \
+              "$version_url")"
+            if [ "$version_status" = 200 ]; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              echo "::error::Read the Docs version '$RELEASE_TAG' was not created after syncing."
+              exit 1
+            fi
+            sleep 2
+          done
+
+          curl --fail --silent --show-error --request POST \
+            --header "Authorization: Token $READTHEDOCS_TOKEN" \
+            "$version_url/builds/"
