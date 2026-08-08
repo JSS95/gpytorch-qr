@@ -42,15 +42,14 @@ documentation = "https://gpytorch-qr.readthedocs.io"
 test = [
     "pytest",
     "pytest-doctestplus",
+]
+doc = [
     "matplotlib",
     "nbconvert",
     "ipykernel",
-]
-doc = [
     "sphinx",
     "numpydoc",
     "pydata_sphinx_theme",
-    "matplotlib",
     "myst-nb",
     "scikit-learn",
     "pytest-doctestplus",
