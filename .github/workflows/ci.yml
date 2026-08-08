@@ -104,7 +104,7 @@ jobs:
 
       - name: install package
         run: |
-          pip install .[test]
+          pip install .[doc]
 
       - run: GPYTORCHQR_N_EPOCHS=1 jupyter nbconvert --execute --to notebook --stdout ${{ matrix.notebook }} > /dev/null
 
