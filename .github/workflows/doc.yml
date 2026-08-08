@@ -1,0 +1,31 @@
+name: Publish documentation
+
+on:
+  repository_dispatch:
+    types: [build-release-docs]
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Read the Docs build
+        env:
+          READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
+          RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+        run: |
+          if [ -z "$READTHEDOCS_TOKEN" ]; then
+            echo "::error::Missing READTHEDOCS_TOKEN secret."
+            exit 1
+          fi
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::Missing release_tag repository dispatch payload."
+            exit 1
+          fi
+
+          encoded_tag="$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$RELEASE_TAG")"
+          curl --fail --silent --show-error --request POST \
+            --header "Authorization: Token $READTHEDOCS_TOKEN" \
+            "https://app.readthedocs.org/api/v3/projects/gpytorch-qr/versions/${encoded_tag}/builds/"
