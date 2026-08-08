@@ -36,7 +36,7 @@ spec:
           args:
             - |
               apt-get update
-              apt-get install -y --no-install-recommends ca-certificates curl git openssl
+              apt-get install -y --no-install-recommends ca-certificates curl git gzip openssl tar
               git init .
               git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
               git fetch --depth 1 origin "${GIT_SHA}"
@@ -44,13 +44,14 @@ spec:
 
               pip install .[doc]
 
-              if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
-                export GPYTORCHQR_N_EPOCHS=1
-              fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
-              bash -euo pipefail .github/k8s/check-run.sh completed success
 
+              if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+                bash -euo pipefail .github/k8s/upload-artifact.sh
+              fi
+
+              bash -euo pipefail .github/k8s/check-run.sh completed success
           env:
             - name: GH_APP_ID
               valueFrom:
@@ -74,5 +75,9 @@ spec:
               value: "${GIT_SHA}"
             - name: GITHUB_EVENT_NAME
               value: "${GITHUB_EVENT_NAME}"
+            - name: GITHUB_RELEASE_ID
+              value: "${GITHUB_RELEASE_ID}"
+            - name: GITHUB_RELEASE_TAG_NAME
+              value: "${GITHUB_RELEASE_TAG_NAME}"
             - name: GITHUB_CHECK_RUN_ID
               value: "${GITHUB_CHECK_RUN_ID}"
