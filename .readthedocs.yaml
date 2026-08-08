@@ -16,8 +16,6 @@ build:
             "https://github.com/JSS95/gpytorch-qr/releases/download/${release_tag}/examples-${release_tag}.tar.gz"
           tar -xzf "$archive_file" -C examples
         fi
-    post_build:
-      - GITHUB_REPOSITORY=JSS95/gpytorch-qr GIT_SHA="$READTHEDOCS_GIT_COMMIT_HASH" GITHUB_CHECK_RUN_NAME="publish doc" bash -euo pipefail .github/scripts/check-run.sh completed success "Documentation published"
 
 sphinx:
   configuration: doc/source/conf.py

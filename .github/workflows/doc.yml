@@ -117,8 +117,17 @@ jobs:
           echo "::error::Timed out waiting for Read the Docs build $BUILD_ID."
           exit 1
 
+      - name: Mark publish doc check as successful
+        if: success()
+        env:
+          GH_APP_ID: ${{ secrets.GH_APP_ID }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+        run: bash -euo pipefail .github/scripts/check-run.sh completed success "Documentation published"
+
       - name: Mark publish doc check as failed
-        if: failure() && (steps.trigger-read-the-docs.outcome == 'failure' || steps.monitor-read-the-docs.outcome == 'failure')
+        if: failure()
         env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
