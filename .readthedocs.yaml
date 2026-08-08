@@ -4,6 +4,19 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.12"
+  jobs:
+    pre_build:
+      - |
+        if [ "$READTHEDOCS_VERSION_TYPE" = "tag" ]; then
+          release_tag="$READTHEDOCS_GIT_IDENTIFIER"
+          encoded_tag="$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$release_tag")"
+          archive_file="$(mktemp --suffix=.tar.gz)"
+          trap 'rm -f "$archive_file"' EXIT
+          curl --fail --location --silent --show-error \
+            --output "$archive_file" \
+            "https://github.com/JSS95/gpytorch-qr/releases/download/${encoded_tag}/examples-${release_tag}.tar.gz"
+          tar -xzf "$archive_file" -C examples
+        fi
 
 sphinx:
   configuration: doc/source/conf.py
