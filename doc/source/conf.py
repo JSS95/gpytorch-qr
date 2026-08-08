@@ -36,6 +36,10 @@ extensions = [
     "matplotlib.sphinxext.plot_directive",
 ]
 
+myst_enable_extensions = [
+    "dollarmath",
+]
+
 autodoc_member_order = "bysource"
 
 numpydoc_use_plots = True
