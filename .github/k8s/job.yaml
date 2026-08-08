@@ -36,7 +36,7 @@ spec:
           args:
             - |
               apt-get update
-              apt-get install -y --no-install-recommends ca-certificates git
+              apt-get install -y --no-install-recommends ca-certificates curl git openssl
               git init .
               git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
               git fetch --depth 1 origin "${GIT_SHA}"
@@ -49,6 +49,32 @@ spec:
               fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
               jupyter nbconvert --to notebook --execute --inplace examples/**/*.ipynb
+
+              private_key_file="$(mktemp)"
+              trap 'rm -f "$private_key_file"' EXIT
+              printf '%s' "$GH_APP_PRIVATE_KEY" > "$private_key_file"
+              issued_at="$(($(date +%s) - 60))"
+              expires_at="$((issued_at + 540))"
+              jwt_header="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+              jwt_payload="$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$issued_at" "$expires_at" "$GH_APP_ID" | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+              jwt_signature="$(printf '%s' "$jwt_header.$jwt_payload" | openssl dgst -sha256 -sign "$private_key_file" | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+              app_jwt="$jwt_header.$jwt_payload.$jwt_signature"
+              installation_id="$(curl --fail --silent --show-error \
+                --header "Authorization: Bearer $app_jwt" \
+                --header 'Accept: application/vnd.github+json' \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/installation" | \
+                python -c 'import json, sys; print(json.load(sys.stdin)["id"])')"
+              installation_token="$(curl --fail --silent --show-error --request POST \
+                --header "Authorization: Bearer $app_jwt" \
+                --header 'Accept: application/vnd.github+json' \
+                "https://api.github.com/app/installations/${installation_id}/access_tokens" | \
+                python -c 'import json, sys; print(json.load(sys.stdin)["token"])')"
+              curl --fail --silent --show-error --request PATCH \
+                --header "Authorization: Bearer $installation_token" \
+                --header 'Accept: application/vnd.github+json' \
+                --header 'Content-Type: application/json' \
+                --data '{"status":"completed","conclusion":"success"}' \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/check-runs/${GITHUB_CHECK_RUN_ID}"
           env:
             - name: GH_APP_ID
               valueFrom:
@@ -72,3 +98,5 @@ spec:
               value: "${GIT_SHA}"
             - name: GITHUB_EVENT_NAME
               value: "${GITHUB_EVENT_NAME}"
+            - name: GITHUB_CHECK_RUN_ID
+              value: "${GITHUB_CHECK_RUN_ID}"

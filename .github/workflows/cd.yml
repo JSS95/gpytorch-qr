@@ -15,11 +15,34 @@ permissions:
 
 jobs:
 
-  k8s:
+  deploy:
 
     runs-on: ubuntu-latest
 
     steps:
+
+      - name: Create GitHub App token for checks
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          permission-checks: write
+
+      - name: Create checks
+        id: checks
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { data: check } = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'k8s',
+              head_sha: context.payload.pull_request?.head?.sha ?? context.sha,
+              status: 'in_progress',
+            });
+            core.setOutput('k8s-check-run-id', String(check.id));
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,12 +78,14 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy to Kubernetes
+        id: deploy-to-kubernetes
         shell: bash
         env:
           GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_CHECK_RUN_ID: ${{ steps.checks.outputs.k8s-check-run-id }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
@@ -81,6 +106,20 @@ jobs:
             "pod" \
             --selector="job-name=${job_name}" \
             --timeout=120s
+
+      - name: Mark k8s check as failed
+        if: failure() && steps.deploy-to-kubernetes.outcome == 'failure'
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: Number('${{ steps.checks.outputs.k8s-check-run-id }}'),
+              status: 'completed',
+              conclusion: 'failure',
+            });
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
