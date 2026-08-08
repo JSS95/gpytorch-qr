@@ -38,7 +38,7 @@ spec:
               apt-get update
               apt-get install -y --no-install-recommends ca-certificates git
               git init .
-              git remote add origin "${GITHUB_REPOSITORY}"
+              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
               git fetch --depth 1 origin "${GIT_SHA}"
               git checkout --detach FETCH_HEAD
 
