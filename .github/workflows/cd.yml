@@ -58,7 +58,7 @@ jobs:
         shell: bash
         env:
           GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GITHUB_REPOSITORY: ${{ github.event.pull_request.head.repo.clone_url || format('{0}/{1}.git', github.server_url, github.repository) }}
+          GITHUB_REPOSITORY: ${{ github.server_url }}/${{ github.repository }}.git
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
@@ -70,7 +70,8 @@ jobs:
           CPU_REQUEST: ${{ vars.CPU_REQUEST }}
           GPU_REQUEST: ${{ vars.GPU_REQUEST }}
         run: |
-          job_name="gpytorch_qr-${GIT_SHA::7}-${{ github.event_name }}-${RUN_ID}-${RUN_ATTEMPT}"
+          event_name="${{ github.event_name }}"
+          job_name="gpytorch-qr.${GIT_SHA::7}-${event_name//_/}.${RUN_ID}-${RUN_ATTEMPT}"
           export JOB_NAME="$job_name"
           template_vars="$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' .github/k8s/job.yaml | sort -u | tr '\n' ' ')"
           envsubst "$template_vars" < .github/k8s/job.yaml | kubectl apply -f -
