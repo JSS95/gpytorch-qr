@@ -17,12 +17,21 @@ spec:
       nodeSelector:
           mlx.navercorp.com/zone: ${MLXP_ZONE}
       restartPolicy: Never
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 600
       containers:
         - name: build
           image: python:3.13
           imagePullPolicy: Always
           workingDir: /workspace
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/bash
+                  - -c
+                  - |
+                    cd /workspace
+                    bash -euo pipefail .github/k8s/check-run.sh completed cancelled
           resources:
             requests:
               memory: "16Gi"
