@@ -42,6 +42,7 @@ documentation = "https://gpytorch-qr.readthedocs.io"
 test = [
     "pytest",
     "pytest-doctestplus",
+    "matplotlib",
 ]
 doc = [
     "matplotlib",
