@@ -57,5 +57,4 @@ Here, correlation between :math:`f_i(x)` dictates correlation between gaps :math
    :maxdepth: 1
 
    mtgpqr.ipynb
-   mtgpqr_independent.ipynb
    mtgpqr_cg.ipynb
