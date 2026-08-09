@@ -133,6 +133,17 @@ jobs:
           echo "::error::Timed out waiting for Read the Docs build $BUILD_ID."
           exit 1
 
+      - name: Activate Read the Docs version
+        env:
+          READTHEDOCS_TOKEN: ${{ secrets.READTHEDOCS_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.client_payload.release_tag }}
+        run: |
+          curl --fail --silent --show-error --request PATCH \
+            --header "Authorization: Token $READTHEDOCS_TOKEN" \
+            --header "Content-Type: application/json" \
+            --data '{"active": true, "hidden": false}' \
+            "https://app.readthedocs.org/api/v3/projects/gpytorch-qr/versions/${RELEASE_TAG}/"
+
       - name: Mark publish doc check as successful
         if: success() && github.event_name == 'repository_dispatch'
         env:
