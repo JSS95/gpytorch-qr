@@ -48,21 +48,14 @@ Correlated :math:`f_i(x)` can be implemented by using :class:`LMCVariationalStra
 
 where :math:`a_{ij}` is a learnable coefficient matrix.
 
-For direct representation, uncorrelated GP output means that :math:`Q_{\tau_i}(x)` are independent.
+For direct representation, correlation structure dictates the correlation of :math:`Q_{\tau_i}(x)`.
 
 For center-gap representation, :math:`Q_{\tau_i}(x)` are always correlated by the additive structure.
 Here, correlation between :math:`f_i(x)` dictates correlation between gaps :math:`\Delta Q_i(x)`.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Independent GPs
-
-   mtgpqr_independent.ipynb
-   mtgpqr_cg_independent.ipynb
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Correlated GPs
 
    mtgpqr.ipynb
+   mtgpqr_independent.ipynb
    mtgpqr_cg.ipynb
