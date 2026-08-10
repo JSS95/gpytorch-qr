@@ -72,4 +72,4 @@ doctest_optionflags = [
     "IGNORE_EXCEPTION_DETAIL",
     "ELLIPSIS",
 ]
-addopts = "--ignore=doc --ignore=examples --doctest-plus --import-mode=importlib"
+addopts = "--ignore=doc --ignore=examples --import-mode=importlib"
