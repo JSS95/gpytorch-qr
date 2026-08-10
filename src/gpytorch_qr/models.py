@@ -209,8 +209,7 @@ class CenterGapQuantileGP(QuantileGP):
     Parameters
     ----------
     variational_strategy
-    mean_module : gpytorch_qr.centergap.CenterGapMean
-        Mean module for center-gap representation.
+    mean_module
     covar_module
     num_quantiles : list of int
         The number of quantiles in each output dimension.
