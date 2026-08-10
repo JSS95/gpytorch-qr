@@ -9,7 +9,7 @@ from .distributions import QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
-    "ALDLikelihood",
+    "AsymmetricLaplaceLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputDirectQuantileLikelihood",
@@ -28,8 +28,20 @@ class _ALDLikelihoodBase(Likelihood):
         self.noise_covar = noise_covar
 
 
-class ALDLikelihood(_ALDLikelihoodBase):
-    """Asymmetric Laplace distribution likelihood."""
+class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
+    r"""Likelihood with homoscedastic asymmetric Laplace distribution.
+
+    Parameters
+    ----------
+    kappa : torch.Tensor
+        The asymmetry parameters of the distribution.
+    noise_prior
+        Prior for noise parameter :math:`\sigma^2`.
+    noise_constraint
+        Constraint for noise parameter :math:`\sigma^2`.
+    batch_shape: torch.Size, default=torch.Size()
+        The batch shape of the learned noise parameter.
+    """
 
     def __init__(
         self,
