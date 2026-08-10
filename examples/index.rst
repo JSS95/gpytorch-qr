@@ -57,8 +57,7 @@ Here, correlation between :math:`f_i(x)` dictates correlation between gaps :math
    :maxdepth: 1
    :caption: Basic usage
 
-   basic_usage/mtgpqr.ipynb
-   basic_usage/mtgpqr_cg.ipynb
+   basic_usage/representation.ipynb
 
 .. toctree::
    :glob:
