@@ -26,12 +26,6 @@ Variational strategies
 .. automodule:: gpytorch_qr.variational
     :members:
 
-Mean modules
-------------
-
-.. automodule:: gpytorch_qr.means
-    :members:
-
 Utilities
 ---------
 
