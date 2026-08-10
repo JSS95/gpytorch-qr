@@ -296,7 +296,6 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> from gpytorch.variational import VariationalStrategy
     >>> from gpytorch.means import ConstantMean
     >>> from gpytorch.kernels import RBFKernel, ScaleKernel
-    >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
     >>> from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
     >>> from gpytorch_qr.variational import CenterGapLMCVariationalStrategy
@@ -325,10 +324,7 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     ...             num_quantiles=[num_q],
     ...             num_lower_quantiles=[num_lower_q],
     ...         )
-    ...         mean = CenterGapMean(
-    ...             ConstantMean(batch_shape=torch.Size([1])),
-    ...             ConstantMean(batch_shape=torch.Size([num_latents - 1])),
-    ...         )
+    ...         mean = ConstantMean(batch_shape=torch.Size([num_latents]))
     ...         covar = ScaleKernel(
     ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
     ...             batch_shape=torch.Size([num_latents]),
