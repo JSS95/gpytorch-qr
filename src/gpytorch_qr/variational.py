@@ -9,15 +9,10 @@ __all__ = [
 
 
 class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrategy):
-    r"""Special LMC variational strategy for the center-gap representation.
+    r"""A special LMC variational strategy for the center-gap representation.
 
-    This class forces the following structure:
-
-    1. Each central quantile of each output dimension is directly represented by
-       a dedicated independent latent function.
-    2. Gap functions for all output dimensions are represented by
-       linear combinations of the remaining latent functions.
-    3. Only the coefficients for the gap functions are learned.
+    This class enforces independence between the central quantiles and the
+    gap functions.
 
     Parameters
     ----------
@@ -26,28 +21,20 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
     num_latents
     latent_dim
     jitter_val
+    num_central_latents : int, optional
+        The number of latent functions that are linearly combined to model the
+        central quantiles.
+        If not passed, defaults to ``len(num_quantiles)``.
     num_quantiles : list of int, optional
         The number of quantiles in each output dimension.
         Its sum must equal *num_tasks*.
-        If not passed, defaults to ``[num_tasks]``, i.e.,
-        output is assumed to be 1-dimensional.
-    num_lower_quantiles : list of int, optional
-        The number of lower quantiles in each output dimension
-        for center-gap representation.
-        If not passed, defaults to a balanced split of the quantiles.
+        If not passed, defaults to ``[num_tasks]``.
 
     Notes
     -----
-    This class is introduced to facilitate implementing center-gap model
-    where the gaps are correlated while the center has prior mean.
+    .. rubric:: Input GP
 
-    The first ``k`` latent functions directly represent the central quantiles of each
-    output dimension, and they do not form any linear combinations with the other
-    latent functions.
-    The remaining latent functions are linearly combined to model the gap
-    functions between quantiles.
-
-    The input ``T`` latent GPs are structured as
+    The input ``T`` latent GPs are split to
 
     .. code-block:: text
 
@@ -55,31 +42,30 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
 
     where:
 
-    - ``c_i`` is the central quantile for *i*-th output dimension,
-    - ``g_j`` is the *j*-th latent function for modeling the gaps between quantiles.
+    - ``c_i`` are linearly combined to form central quantiles for each output dimension.
+    - ``g_j`` are linearly combined to form the gap functions between quantiles.
+    - ``c_i`` and ``g_j`` are not combined with each other, i.e., central quantiles and
+      gap functions are independent.
+
+    The number of ``c_i``, i.e., ``k``, is *num_central_latents*.
+
+    .. rubric:: Output GP
 
     The output multitask GPs are structured as
 
     .. code-block:: text
 
-        [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+        [C_1, C_2, ..., C_q,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_q, *U_q]
 
     where:
 
-    - ``c_i`` is the central quantile for *i*-th output dimension,
+    - ``C_i`` is the central quantile for *i*-th output dimension,
     - ``L_i`` contains pre-softplus-transformed lower gaps for *i*-th output dimension,
     - ``U_i`` contains pre-softplus-transformed upper gaps for *i*-th output dimension.
 
-    .. hint::
-
-        The limitation of this class is that
-
-        1. It cannot correlate the central quantile and the gap functions.
-        2. It cannot correlate the central quantiles of different output dimensions.
-
-        Should such correlations be desired, one can modify the input observations by
-        :math:`y \leftarrow y - \mu(x)` and use a standard LMC variational strategy to
-        model the residuals.
+    The number of output dimensions, i.e., ``q``, is ``len(num_quantiles)``.
+    The sum ``1 + len(L_i) + len(U_i)`` equals ``num_quantiles[i]`` for
+    each output dimension *i*.
     """
 
     def __init__(
@@ -89,28 +75,16 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
         num_latents,
         latent_dim=-1,
         jitter_val=None,
+        num_central_latents=None,
         num_quantiles=None,
-        num_lower_quantiles=None,
     ):
         if num_quantiles is None:
             num_quantiles = [num_tasks]
-        if num_lower_quantiles is None:
-            nlq = []
-            for Q in num_quantiles:
-                nlq.append((Q - 1) // 2)
-            num_lower_quantiles = nlq
+        if num_central_latents is None:
+            num_central_latents = len(num_quantiles)
         if not sum(num_quantiles) == num_tasks:
             raise ValueError("The sum of num_quantiles must equal num_tasks.")
 
-        if num_latents < len(num_quantiles):
-            raise ValueError(
-                "num_latents must be at least the number of output dimensions."
-            )
-        if num_latents == len(num_quantiles) and any(Q > 1 for Q in num_quantiles):
-            raise ValueError(
-                "If any output dimension has more than one quantile, "
-                "num_latents must be greater than the number of output dimensions."
-            )
         super().__init__(
             base_variational_strategy,
             num_tasks,  # Q
@@ -118,24 +92,18 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
             latent_dim,
             jitter_val,
         )
+        self.num_central_latents = num_central_latents
         self.num_quantiles = num_quantiles
-        self.num_lower_quantiles = num_lower_quantiles
 
         # lmc_coefficients: (*B, T, Q)
         lmc_coefficients = self.lmc_coefficients.detach().clone()
         del self.lmc_coefficients
         T, Q = lmc_coefficients.shape[-2:]
-        k = len(num_quantiles)
-        self.register_buffer("lmc_mask", self.construct_lmc_mask(T, Q, k))
+        self.register_buffer("lmc_mask", self.construct_lmc_mask(T, Q))
 
         self.register_parameter("_lmc_coeff", torch.nn.Parameter(lmc_coefficients))
-        coeff = torch.zeros(T, Q)
-        for i in range(k):
-            coeff[i, i] = 1.0
-        self.register_buffer("_fixed_coeff", coeff)
 
-    @classmethod
-    def construct_lmc_mask(cls, T, Q, k):
+    def construct_lmc_mask(self, T, Q):
         """Construct a mask to restrict the learnable LMC coefficients.
 
         Parameters
@@ -144,8 +112,6 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
             The number of latent functions.
         Q : int
             The number of quantiles.
-        k : int
-            The number of output dimensions.
 
         Returns
         -------
@@ -154,9 +120,10 @@ class CenterGapLMCVariationalStrategy(gpytorch.variational.LMCVariationalStrateg
             1 indicates learnable coefficients, and 0 indicates fixed coefficients.
         """
         mask = torch.zeros(T, Q)
-        mask[k:, k:] = 1  # Gap functions
+        mask[: self.num_central_latents, : len(self.num_quantiles)] = 1
+        mask[self.num_central_latents :, len(self.num_quantiles) :] = 1
         return mask
 
     @property
     def lmc_coefficients(self):
-        return self._lmc_coeff * self.lmc_mask + self._fixed_coeff
+        return self._lmc_coeff * self.lmc_mask

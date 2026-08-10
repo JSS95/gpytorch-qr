@@ -43,8 +43,8 @@ def test_mtgpqr_cg():
                 ),
                 num_quantiles,
                 num_latents,
+                num_central_latents=1,
                 num_quantiles=[num_quantiles],
-                num_lower_quantiles=[num_lower_quantiles],
             )
 
             mean = ConstantMean(batch_shape=torch.Size([num_latents]))
@@ -132,8 +132,8 @@ def test_mtgpqr_cg_multivariate():
                 ),
                 num_quantiles,
                 num_latents,
+                num_central_latents=1,
                 num_quantiles=[num_quantiles],
-                num_lower_quantiles=[num_lower_quantiles],
             )
 
             mean = ConstantMean(batch_shape=torch.Size([num_latents]))
