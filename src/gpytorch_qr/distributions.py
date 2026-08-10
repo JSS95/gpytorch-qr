@@ -60,6 +60,7 @@ class AsymmetricLaplace(Distribution):
         super().__init__(batch_shape, validate_args=validate_args)
 
     def expand(self, batch_shape, _instance=None):
+        """Return a new distribution instance with batch dimensions expanded."""
         new = self._get_checked_instance(AsymmetricLaplace, _instance)
         batch_shape = torch.Size(batch_shape)
         new.loc = self.loc.expand(batch_shape)
