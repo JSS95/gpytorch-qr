@@ -10,6 +10,7 @@ from .utils import centergap_to_quantiles
 
 __all__ = [
     "AsymmetricLaplaceLikelihood",
+    "MultitaskAsymmetricLaplaceLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputDirectQuantileLikelihood",
@@ -31,7 +32,7 @@ class _ALDLikelihoodBase(Likelihood):
 
     @property
     def noise(self):
-        """The ALD noise variance :math:`\sigma^2`."""
+        r"""The ALD noise variance :math:`\sigma^2`."""
         return self.noise_covar.noise
 
     @noise.setter
@@ -49,6 +50,32 @@ class _ALDLikelihoodBase(Likelihood):
 
     def _shaped_noise_covar(self, base_shape, *params, **kwargs):
         return self.noise_covar(*params, shape=base_shape, **kwargs)
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            Latent GP posterior at the observed locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        # res: (*B, N).
+        # super().expected_log_prob internally uses self.forward() to convert
+        # GP posterior to ALD, then computes the log probability of observations.
+        # Thus, subclass can just implement forward().
+        res = super().expected_log_prob(observations, function_dist, *args, **kwargs)
+
+        num_event_dim = len(function_dist.event_shape)
+        if num_event_dim > 1:
+            res = res.sum(list(range(-1, -num_event_dim, -1)))
+        return res
 
 
 class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
