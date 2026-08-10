@@ -58,6 +58,7 @@ Here, correlation between :math:`f_i(x)` dictates correlation between gaps :math
    :caption: Basic usage
 
    basic_usage/representation.ipynb
+   basic_usage/correlation.ipynb
 
 .. toctree::
    :glob:
