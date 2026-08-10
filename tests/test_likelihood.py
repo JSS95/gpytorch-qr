@@ -1,12 +1,17 @@
 import gpytorch
+import pytest
 import torch
+from gpytorch.likelihoods.noise_models import HomoskedasticNoise
+from torch.distributions import Independent
 
-from gpytorch_qr.distributions import QuantileALD
+from gpytorch_qr.distributions import AsymmetricLaplace, QuantileALD
 from gpytorch_qr.likelihoods import (
     CenterGapQuantileLikelihood,
     DirectQuantileLikelihood,
     MultiOutputCenterGapQuantileLikelihood,
     MultiOutputDirectQuantileLikelihood,
+    MultitaskAsymmetricLaplaceLikelihood,
+    _MultitaskALDLikelihoodBase,
 )
 from gpytorch_qr.utils import centergap_to_quantiles
 
@@ -47,6 +52,156 @@ def _make_mtmvn(N, T, batch_shape=torch.Size([])):
     return gpytorch.distributions.MultitaskMultivariateNormal.from_independent_mvns(
         mvns
     )
+
+
+# ===========================================================================
+# MultitaskAsymmetricLaplaceLikelihood
+# ===========================================================================
+
+
+class TestMultitaskAsymmetricLaplaceLikelihood:
+    def test_inherits_multitask_ald_base(self):
+        assert issubclass(
+            MultitaskAsymmetricLaplaceLikelihood,
+            _MultitaskALDLikelihoodBase,
+        )
+
+    def test_base_initializes_task_correlation_parameters_with_batch_shape(self):
+        noise_covar = HomoskedasticNoise()
+        likelihood = _MultitaskALDLikelihoodBase(
+            Q1_LEVELS,
+            Q1,
+            noise_covar,
+            rank=2,
+            batch_shape=torch.Size([B]),
+        )
+
+        correlation = likelihood._eval_corr_matrix()
+
+        assert likelihood.noise_covar is noise_covar
+        assert likelihood.task_noise_corr.shape == torch.Size([B, 4])
+        assert correlation.shape == torch.Size([B, Q1, Q1])
+        assert torch.allclose(
+            correlation.diagonal(dim1=-1, dim2=-2),
+            torch.ones(B, Q1),
+        )
+        assert torch.allclose(correlation, correlation.transpose(-1, -2))
+
+    def test_base_registers_task_correlation_prior(self):
+        likelihood = _MultitaskALDLikelihoodBase(
+            Q1_LEVELS,
+            Q1,
+            HomoskedasticNoise(),
+            rank=2,
+            task_correlation_prior=gpytorch.priors.NormalPrior(0, 1),
+        )
+
+        prior_names = [name for name, *_ in likelihood.named_priors()]
+
+        assert "MultitaskErrorCorrelationPrior" in prior_names
+
+    def test_base_rejects_correlation_prior_when_rank_is_zero(self):
+        with pytest.raises(ValueError, match="task_correlation_prior if rank>0"):
+            _MultitaskALDLikelihoodBase(
+                Q1_LEVELS,
+                Q1,
+                HomoskedasticNoise(),
+                task_correlation_prior=gpytorch.priors.NormalPrior(0, 1),
+            )
+
+    def test_base_rejects_rank_greater_than_num_tasks(self):
+        with pytest.raises(ValueError, match="Cannot have rank"):
+            _MultitaskALDLikelihoodBase(
+                Q1_LEVELS,
+                Q1,
+                HomoskedasticNoise(),
+                rank=Q1 + 1,
+            )
+
+    def test_forward_returns_independent_ald_with_task_event(self):
+        likelihood = MultitaskAsymmetricLaplaceLikelihood(Q1_LEVELS, Q1)
+        output = likelihood(torch.randn(S, N, Q1))
+
+        assert isinstance(output, Independent)
+        assert isinstance(output.base_dist, AsymmetricLaplace)
+        assert output.batch_shape == torch.Size([S, N])
+        assert output.event_shape == torch.Size([Q1])
+
+    def test_forward_uses_global_and_task_noise(self):
+        likelihood = MultitaskAsymmetricLaplaceLikelihood(Q1_LEVELS, Q1)
+        likelihood.noise = 0.2
+        likelihood.task_noises = torch.tensor([0.1, 0.3, 0.5])
+
+        output = likelihood(torch.zeros(N, Q1))
+        expected_scale = torch.tensor([0.3, 0.5, 0.7]).sqrt().expand(N, Q1)
+
+        assert torch.allclose(output.base_dist.scale, expected_scale)
+        assert torch.equal(output.base_dist.asymmetry[0], Q1_LEVELS)
+
+    def test_expected_log_prob_sums_tasks_only(self):
+        likelihood = MultitaskAsymmetricLaplaceLikelihood(Q1_LEVELS, Q1)
+        function_dist = _make_mtmvn(N, Q1)
+
+        with gpytorch.settings.num_likelihood_samples(S):
+            result = likelihood.expected_log_prob(torch.randn(N, Q1), function_dist)
+
+        assert result.shape == torch.Size([N])
+
+    def test_batched_noise_parameters_broadcast_over_samples_and_data(self):
+        likelihood = MultitaskAsymmetricLaplaceLikelihood(
+            Q1_LEVELS,
+            Q1,
+            batch_shape=torch.Size([B]),
+        )
+        output = likelihood(torch.randn(S, B, N, Q1))
+
+        assert output.base_dist.scale.shape == torch.Size([S, B, N, Q1])
+        assert output.base_dist.asymmetry.shape == torch.Size([S, B, N, Q1])
+
+    def test_ranked_task_noise_builds_repeated_covariance_blocks(self):
+        likelihood = MultitaskAsymmetricLaplaceLikelihood(
+            1.0,
+            Q1,
+            rank=Q1,
+            has_global_noise=False,
+        )
+        covariance = torch.tensor(
+            [
+                [2.0, 0.5, 0.25],
+                [0.5, 1.5, 0.1],
+                [0.25, 0.1, 1.0],
+            ]
+        )
+        likelihood.task_noise_covar = covariance
+
+        shaped = likelihood._shaped_noise_covar(torch.Size([2, Q1])).to_dense()
+
+        assert torch.allclose(shaped[:Q1, :Q1], covariance, atol=1e-5)
+        assert torch.allclose(shaped[Q1:, Q1:], covariance, atol=1e-5)
+        assert torch.count_nonzero(shaped[:Q1, Q1:]) == 0
+
+    def test_global_noise_only(self):
+        likelihood = MultitaskAsymmetricLaplaceLikelihood(
+            1.0,
+            Q1,
+            has_task_noise=False,
+        )
+        likelihood.noise = 0.4
+
+        output = likelihood(torch.zeros(N, Q1))
+
+        assert torch.allclose(output.base_dist.scale, torch.full((N, Q1), 0.4**0.5))
+
+    def test_rejects_invalid_configuration(self):
+        with pytest.raises(ValueError, match="no noise terms"):
+            MultitaskAsymmetricLaplaceLikelihood(
+                1.0,
+                Q1,
+                has_global_noise=False,
+                has_task_noise=False,
+            )
+        with pytest.raises(ValueError, match="trailing dimension of kappa"):
+            MultitaskAsymmetricLaplaceLikelihood(torch.ones(Q1 + 1), Q1)
 
 
 # ===========================================================================

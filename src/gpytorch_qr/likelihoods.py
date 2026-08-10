@@ -2,14 +2,25 @@
 
 import gpytorch
 import torch
+from gpytorch.constraints import GreaterThan
 from gpytorch.likelihoods import Likelihood
 from gpytorch.likelihoods.noise_models import HomoskedasticNoise
+from linear_operator import to_linear_operator
+from linear_operator.operators import (
+    ConstantDiagLinearOperator,
+    DiagLinearOperator,
+    KroneckerProductDiagLinearOperator,
+    KroneckerProductLinearOperator,
+    RootLinearOperator,
+)
+from torch.distributions import Independent
 
 from .distributions import AsymmetricLaplace, QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
     "AsymmetricLaplaceLikelihood",
+    "MultitaskAsymmetricLaplaceLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputDirectQuantileLikelihood",
@@ -20,7 +31,7 @@ __all__ = [
 class _ALDLikelihoodBase(Likelihood):
     """Base class for ALD likelihoods for quantile regression."""
 
-    has_analytical_marginal = False
+    has_analytic_marginal = False
 
     def __init__(self, kappa, noise_covar):
         super().__init__()
@@ -114,6 +125,340 @@ class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
             batch_shape=batch_shape,
         )
         super().__init__(kappa, noise_covar=noise_covar)
+
+
+class _MultitaskALDLikelihoodBase(_ALDLikelihoodBase):
+    r"""Base class for multitask asymmetric Laplace likelihoods.
+
+    Parameters
+    ----------
+    kappa : torch.Tensor
+        Asymmetry parameter of the asymmetric Laplace distribution.
+    num_tasks : int
+        Number of tasks.
+    noise_covar : gpytorch.module.Module
+        Model for the noise covariance.
+    rank : int, default=0
+        Rank of the task noise covariance matrix.
+    task_correlation_prior
+        Prior over the task noise correlation matrix. Only used when
+        ``rank > 0``.
+    batch_shape : torch.Size, default=torch.Size()
+        Batch shape of the task correlation parameters.
+    """
+
+    @staticmethod
+    def _prepare_kappa(kappa, num_tasks):
+        if num_tasks < 1:
+            raise ValueError("num_tasks must be positive")
+        kappa = torch.as_tensor(kappa, dtype=torch.get_default_dtype())
+        if kappa.ndim == 0:
+            kappa = kappa.expand(num_tasks)
+        elif kappa.shape[-1] not in (1, num_tasks):
+            raise ValueError(
+                "The trailing dimension of kappa must be 1 or num_tasks "
+                f"({num_tasks}), got {kappa.shape[-1]}"
+            )
+        return kappa
+
+    def __init__(
+        self,
+        kappa,
+        num_tasks,
+        noise_covar,
+        rank=0,
+        task_correlation_prior=None,
+        batch_shape=torch.Size(),
+    ):
+        kappa = self._prepare_kappa(kappa, num_tasks)
+        super().__init__(kappa=kappa, noise_covar=noise_covar)
+        if rank != 0:
+            if rank > num_tasks:
+                raise ValueError(
+                    f"Cannot have rank ({rank}) greater than num_tasks "
+                    f"({num_tasks})"
+                )
+            tidcs = torch.tril_indices(num_tasks, rank, dtype=torch.long)
+            # (1, 1) must be 1.0, so it does not need parameterization.
+            self.tidcs = tidcs[:, 1:]
+            task_noise_corr = torch.randn(*batch_shape, self.tidcs.size(-1))
+            self.register_parameter(
+                "task_noise_corr", torch.nn.Parameter(task_noise_corr)
+            )
+            if task_correlation_prior is not None:
+                self.register_prior(
+                    "MultitaskErrorCorrelationPrior",
+                    task_correlation_prior,
+                    lambda module: module._eval_corr_matrix(),
+                )
+        elif task_correlation_prior is not None:
+            raise ValueError("Can only specify task_correlation_prior if rank>0")
+
+        self.num_tasks = num_tasks
+        self.rank = rank
+
+    def _eval_corr_matrix(self):
+        task_noise_corr = self.task_noise_corr
+        factor_diag = torch.ones(
+            *task_noise_corr.shape[:-1],
+            self.num_tasks,
+            device=task_noise_corr.device,
+            dtype=task_noise_corr.dtype,
+        )
+        correlation_factor = torch.diag_embed(factor_diag)
+        correlation_factor[..., self.tidcs[0], self.tidcs[1]] = task_noise_corr
+        # Squared rows must sum to one for this to be a correlation matrix.
+        correlation_factor = (
+            correlation_factor
+            / correlation_factor.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        )
+        return correlation_factor @ correlation_factor.transpose(-1, -2)
+
+    def _shaped_noise_covar(
+        self, shape, add_noise=True, interleaved=True, *params, **kwargs
+    ):
+        if not self.has_task_noise:
+            return ConstantDiagLinearOperator(
+                self.noise, diag_shape=shape[-2] * self.num_tasks
+            )
+
+        if self.rank == 0:
+            task_noises = self.task_noises
+            task_variance = DiagLinearOperator(task_noises)
+            dtype = task_noises.dtype
+            device = task_noises.device
+            kron_type = KroneckerProductDiagLinearOperator
+        else:
+            factor = self.task_noise_covar_factor
+            task_variance = RootLinearOperator(factor)
+            dtype = factor.dtype
+            device = factor.device
+            kron_type = KroneckerProductLinearOperator
+
+        identity = ConstantDiagLinearOperator(
+            torch.ones(*shape[:-2], 1, dtype=dtype, device=device),
+            diag_shape=shape[-2],
+        )
+        task_variance = task_variance.expand(*shape[:-2], *task_variance.matrix_shape)
+
+        if add_noise and self.has_global_noise:
+            global_noise = ConstantDiagLinearOperator(
+                self.noise, diag_shape=task_variance.shape[-1]
+            )
+            task_variance = task_variance + global_noise
+
+        if interleaved:
+            return kron_type(identity, task_variance)
+        return kron_type(task_variance, identity)
+
+    def forward(self, function_samples, *params, **kwargs):
+        r"""Return the conditional multitask ALD distribution.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape ``(*B, N, T)``
+            Samples from the multitask latent function.
+
+        Returns
+        -------
+        torch.distributions.Independent
+            Independent ALD marginals with the final task dimension treated
+            as one event.
+        """
+        if function_samples.shape[-1] != self.num_tasks:
+            raise ValueError(
+                "The trailing dimension of function_samples must equal "
+                f"num_tasks ({self.num_tasks}), got {function_samples.shape[-1]}"
+            )
+        noise = self._shaped_noise_covar(
+            function_samples.shape, *params, **kwargs
+        ).diagonal(dim1=-1, dim2=-2)
+        noise = noise.reshape(*noise.shape[:-1], *function_samples.shape[-2:])
+        base_distribution = AsymmetricLaplace(
+            loc=function_samples,
+            scale=noise.sqrt(),
+            asymmetry=self.kappa.unsqueeze(-2),
+        )
+        return Independent(base_distribution, 1)
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        # forward() already treats the task axis as an event, so GPyTorch's
+        # generic implementation returns one log likelihood per data point.
+        return Likelihood.expected_log_prob(
+            self, observations, function_dist, *args, **kwargs
+        )
+
+
+class MultitaskAsymmetricLaplaceLikelihood(_MultitaskALDLikelihoodBase):
+    r"""Homoscedastic asymmetric Laplace likelihood for multitask models.
+
+    Parameters
+    ----------
+    kappa : torch.Tensor
+        Positive asymmetry parameter shared across tasks, or parameters with
+        trailing dimension ``1`` or ``num_tasks``.
+    num_tasks : int
+        Number of tasks.
+    rank : int, default=0
+        Rank of the task noise covariance.  ``0`` fits independent task
+        variances.
+    batch_shape : torch.Size, default=torch.Size()
+        Batch shape of the learned noise parameters.
+    task_prior
+        Prior over the task noise covariance when ``rank > 0``.
+    noise_prior
+        Prior over the global or diagonal task noise variances.
+    noise_constraint
+        Constraint for noise variances.  Defaults to ``GreaterThan(1e-4)``.
+    has_global_noise : bool, default=True
+        Whether to include the shared :math:`\sigma^2` variance.
+    has_task_noise : bool, default=True
+        Whether to include task-specific noise variances.
+    """
+
+    def __init__(
+        self,
+        kappa,
+        num_tasks,
+        rank=0,
+        batch_shape=torch.Size(),
+        task_prior=None,
+        noise_prior=None,
+        noise_constraint=None,
+        has_global_noise=True,
+        has_task_noise=True,
+    ):
+        # Match MultitaskGaussianLikelihood: this concrete class owns its
+        # homoskedastic noise parameters and bypasses the general base
+        # constructor, which accepts an externally supplied noise model.
+        super(Likelihood, self).__init__()
+        kappa = self._prepare_kappa(kappa, num_tasks)
+        self.register_buffer("kappa", kappa)
+
+        if not has_task_noise and not has_global_noise:
+            raise ValueError(
+                "At least one of has_task_noise or has_global_noise must be "
+                "specified. Attempting to specify a likelihood that has no "
+                "noise terms."
+            )
+        if noise_constraint is None:
+            noise_constraint = GreaterThan(1e-4)
+
+        if has_task_noise:
+            if rank == 0:
+                self.register_parameter(
+                    "raw_task_noises",
+                    torch.nn.Parameter(torch.zeros(*batch_shape, num_tasks)),
+                )
+                self.register_constraint("raw_task_noises", noise_constraint)
+                if noise_prior is not None:
+                    self.register_prior(
+                        "raw_task_noises_prior",
+                        noise_prior,
+                        lambda module: module.task_noises,
+                    )
+                if task_prior is not None:
+                    raise RuntimeError("Cannot set a task_prior if rank=0")
+            else:
+                self.register_parameter(
+                    "task_noise_covar_factor",
+                    torch.nn.Parameter(torch.randn(*batch_shape, num_tasks, rank)),
+                )
+                if task_prior is not None:
+                    self.register_prior(
+                        "MultitaskErrorCovariancePrior",
+                        task_prior,
+                        lambda module: module._eval_covar_matrix(),
+                    )
+
+        self.num_tasks = num_tasks
+        self.rank = rank
+
+        if has_global_noise:
+            self.register_parameter(
+                "raw_noise", torch.nn.Parameter(torch.zeros(*batch_shape, 1))
+            )
+            self.register_constraint("raw_noise", noise_constraint)
+            if noise_prior is not None:
+                self.register_prior(
+                    "raw_noise_prior",
+                    noise_prior,
+                    lambda module: module.noise,
+                )
+
+        self.has_global_noise = has_global_noise
+        self.has_task_noise = has_task_noise
+
+    @property
+    def noise(self):
+        """The global noise variance."""
+        return self.raw_noise_constraint.transform(self.raw_noise)
+
+    @noise.setter
+    def noise(self, value):
+        self._set_noise(value)
+
+    @property
+    def task_noises(self):
+        """The diagonal task noise variances when ``rank=0``."""
+        if self.rank == 0:
+            return self.raw_task_noises_constraint.transform(self.raw_task_noises)
+        raise AttributeError(
+            "Cannot set diagonal task noises when covariance has ",
+            self.rank,
+            ">0",
+        )
+
+    @task_noises.setter
+    def task_noises(self, value):
+        if self.rank == 0:
+            self._set_task_noises(value)
+            return
+        raise AttributeError(
+            "Cannot set diagonal task noises when covariance has ",
+            self.rank,
+            ">0",
+        )
+
+    def _set_noise(self, value):
+        self.initialize(raw_noise=self.raw_noise_constraint.inverse_transform(value))
+
+    def _set_task_noises(self, value):
+        self.initialize(
+            raw_task_noises=self.raw_task_noises_constraint.inverse_transform(value)
+        )
+
+    @property
+    def task_noise_covar(self):
+        """The low-rank task noise covariance when ``rank>0``."""
+        if self.rank > 0:
+            factor = self.task_noise_covar_factor
+            return factor.matmul(factor.transpose(-1, -2))
+        raise AttributeError("Cannot retrieve task noises when covariance is diagonal.")
+
+    @task_noise_covar.setter
+    def task_noise_covar(self, value):
+        if self.rank > 0:
+            with torch.no_grad():
+                factor = to_linear_operator(value).pivoted_cholesky(rank=self.rank)
+                self.task_noise_covar_factor.copy_(factor)
+            return
+        raise AttributeError(
+            "Cannot set non-diagonal task noises when covariance is diagonal."
+        )
+
+    def _eval_covar_matrix(self):
+        covariance_factor = self.task_noise_covar_factor
+        noise = self.noise
+        identity = torch.eye(
+            self.num_tasks,
+            dtype=noise.dtype,
+            device=noise.device,
+        )
+        return (
+            covariance_factor.matmul(covariance_factor.transpose(-1, -2))
+            + noise.unsqueeze(-1) * identity
+        )
 
 
 # Old
