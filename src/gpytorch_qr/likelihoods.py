@@ -221,10 +221,6 @@ class DirectQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     >>> with torch.no_grad():
     ...     quantiles = gp.mean_quantiles(x_pred)
-    >>> import matplotlib.pyplot as plt
-    >>> plt.scatter(x, y, c='gray', marker='.', alpha=0.1)  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_range, true_quantiles, '--', c='k')  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
     """
 
     def forward(self, function_samples):
@@ -296,7 +292,6 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> from gpytorch.variational import VariationalStrategy
     >>> from gpytorch.means import ConstantMean
     >>> from gpytorch.kernels import RBFKernel, ScaleKernel
-    >>> from gpytorch_qr.means import CenterGapMean
     >>> from gpytorch_qr.models import CenterGapQuantileGP
     >>> from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
     >>> from gpytorch_qr.variational import CenterGapLMCVariationalStrategy
@@ -325,10 +320,7 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     ...             num_quantiles=[num_q],
     ...             num_lower_quantiles=[num_lower_q],
     ...         )
-    ...         mean = CenterGapMean(
-    ...             ConstantMean(batch_shape=torch.Size([1])),
-    ...             ConstantMean(batch_shape=torch.Size([num_latents - 1])),
-    ...         )
+    ...         mean = ConstantMean(batch_shape=torch.Size([num_latents]))
     ...         covar = ScaleKernel(
     ...             RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
     ...             batch_shape=torch.Size([num_latents]),
@@ -358,10 +350,6 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     >>> with torch.no_grad():
     ...     quantiles = gp.mean_quantiles_mc(x_pred)
-    >>> import matplotlib.pyplot as plt
-    >>> plt.scatter(x, y, c='gray', marker='.', alpha=0.1)  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_range, true_quantiles, '--', c='k')  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
     """
 
     def __init__(

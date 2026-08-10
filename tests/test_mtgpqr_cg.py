@@ -5,7 +5,6 @@ from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
 from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
-from gpytorch_qr.means import CenterGapMean
 from gpytorch_qr.models import CenterGapQuantileGP
 from gpytorch_qr.variational import CenterGapLMCVariationalStrategy
 
@@ -48,10 +47,7 @@ def test_mtgpqr_cg():
                 num_lower_quantiles=[num_lower_quantiles],
             )
 
-            mean = CenterGapMean(
-                ConstantMean(batch_shape=torch.Size([1])),
-                ConstantMean(batch_shape=torch.Size([num_latents - 1])),
-            )
+            mean = ConstantMean(batch_shape=torch.Size([num_latents]))
             covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
@@ -140,10 +136,7 @@ def test_mtgpqr_cg_multivariate():
                 num_lower_quantiles=[num_lower_quantiles],
             )
 
-            mean = CenterGapMean(
-                ConstantMean(batch_shape=torch.Size([1])),
-                ConstantMean(batch_shape=torch.Size([num_latents - 1])),
-            )
+            mean = ConstantMean(batch_shape=torch.Size([num_latents]))
             covar = ScaleKernel(
                 RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
                 batch_shape=torch.Size([num_latents]),
