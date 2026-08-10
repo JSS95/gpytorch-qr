@@ -3,16 +3,51 @@
 import gpytorch
 import torch
 from gpytorch.likelihoods import Likelihood
+from gpytorch.likelihoods.noise_models import HomoskedasticNoise
 
 from .distributions import QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
+    "ALDLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputDirectQuantileLikelihood",
     "MultiOutputCenterGapQuantileLikelihood",
 ]
+
+
+class _ALDLikelihoodBase(Likelihood):
+    """Base class for ALD likelihoods for quantile regression."""
+
+    has_analytical_marginal = False
+
+    def __init__(self, kappa, noise_covar):
+        super().__init__()
+        self.kappa = kappa
+        self.noise_covar = noise_covar
+
+
+class ALDLikelihood(_ALDLikelihoodBase):
+    """Asymmetric Laplace distribution likelihood."""
+
+    def __init__(
+        self,
+        kappa,
+        noise_prior=None,
+        noise_constraint=None,
+        batch_shape=torch.Size(),
+        **kwargs,
+    ):
+        noise_covar = HomoskedasticNoise(
+            noise_prior=noise_prior,
+            noise_constraint=noise_constraint,
+            batch_shape=batch_shape,
+        )
+        super().__init__(kappa, noise_covar=noise_covar)
+
+
+# Old
 
 
 class _QuantileLikelihoodMixin:
