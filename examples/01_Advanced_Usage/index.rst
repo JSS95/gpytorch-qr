@@ -7,3 +7,4 @@ Advanced Usage
    prior_mean.ipynb
    lengthscale.ipynb
    multi_output.ipynb
+   cross_validation.ipynb
