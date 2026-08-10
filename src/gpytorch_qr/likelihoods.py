@@ -221,10 +221,6 @@ class DirectQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     >>> with torch.no_grad():
     ...     quantiles = gp.mean_quantiles(x_pred)
-    >>> import matplotlib.pyplot as plt
-    >>> plt.scatter(x, y, c='gray', marker='.', alpha=0.1)  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_range, true_quantiles, '--', c='k')  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
     """
 
     def forward(self, function_samples):
@@ -354,10 +350,6 @@ class CenterGapQuantileLikelihood(_QuantileLikelihoodMixin, Likelihood):
     >>> x_pred = torch.linspace(0, 2, 100).reshape(-1, 1)
     >>> with torch.no_grad():
     ...     quantiles = gp.mean_quantiles_mc(x_pred)
-    >>> import matplotlib.pyplot as plt
-    >>> plt.scatter(x, y, c='gray', marker='.', alpha=0.1)  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_range, true_quantiles, '--', c='k')  # doctest: +IGNORE_OUTPUT
-    >>> plt.plot(x_pred, quantiles)  # doctest: +IGNORE_OUTPUT
     """
 
     def __init__(

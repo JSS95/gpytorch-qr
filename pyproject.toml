@@ -41,8 +41,6 @@ documentation = "https://gpytorch-qr.readthedocs.io"
 [project.optional-dependencies]
 test = [
     "pytest",
-    "pytest-doctestplus",
-    "matplotlib",
 ]
 doc = [
     "matplotlib",
@@ -53,7 +51,6 @@ doc = [
     "pydata_sphinx_theme",
     "myst-nb",
     "scikit-learn",
-    "pytest-doctestplus",
 ]
 dev = [
     "flake8",
