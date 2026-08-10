@@ -5,7 +5,7 @@ import torch
 from gpytorch.likelihoods import Likelihood
 from gpytorch.likelihoods.noise_models import HomoskedasticNoise
 
-from .distributions import QuantileALD
+from .distributions import ALD, QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
@@ -24,8 +24,31 @@ class _ALDLikelihoodBase(Likelihood):
 
     def __init__(self, kappa, noise_covar):
         super().__init__()
-        self.kappa = kappa
+        self.register_buffer(
+            "kappa", torch.as_tensor(kappa, dtype=torch.get_default_dtype())
+        )
         self.noise_covar = noise_covar
+
+    @property
+    def noise(self):
+        """The ALD noise variance :math:`\sigma^2`."""
+        return self.noise_covar.noise
+
+    @noise.setter
+    def noise(self, value):
+        self.noise_covar.initialize(noise=value)
+
+    @property
+    def raw_noise(self):
+        """The unconstrained parameter corresponding to :attr:`noise`."""
+        return self.noise_covar.raw_noise
+
+    @raw_noise.setter
+    def raw_noise(self, value):
+        self.noise_covar.initialize(raw_noise=value)
+
+    def _shaped_noise_covar(self, base_shape, *params, **kwargs):
+        return self.noise_covar(*params, shape=base_shape, **kwargs)
 
 
 class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
@@ -57,6 +80,32 @@ class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
             batch_shape=batch_shape,
         )
         super().__init__(kappa, noise_covar=noise_covar)
+
+    def forward(self, function_samples, *params, **kwargs):
+        r"""Return the ALD distribution conditional on latent function samples.
+
+        ``noise`` follows :class:`gpytorch.likelihoods.GaussianLikelihood`'s
+        convention and represents a variance.  The ALD scale parameter is
+        therefore :math:`\lambda = \sqrt{\sigma^2}`.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor
+            Samples of the latent function, with shape ``(*B, N)``.
+
+        Returns
+        -------
+        ALD
+            An asymmetric Laplace distribution centred at ``function_samples``.
+        """
+        noise = self._shaped_noise_covar(
+            function_samples.shape, *params, **kwargs
+        ).diagonal(dim1=-1, dim2=-2)
+        return ALD(
+            m=function_samples,
+            lamda=noise.sqrt(),
+            kappa=self.kappa.unsqueeze(-1),
+        )
 
 
 # Old
