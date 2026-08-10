@@ -13,7 +13,7 @@ GPyTorch-QR is a Python package for quantile regression using GPyTorch.
    :maxdepth: 2
 
    examples/tutorial
-   examples/index_examples
+   examples/index
    reference/index
 
 ==================
