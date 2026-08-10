@@ -14,4 +14,3 @@ Multi-input GPQR
    :caption: Advanced examples
 
    scaling.ipynb
-   constraint.ipynb
