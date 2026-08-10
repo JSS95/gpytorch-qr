@@ -5,12 +5,11 @@ import torch
 from gpytorch.likelihoods import Likelihood
 from gpytorch.likelihoods.noise_models import HomoskedasticNoise
 
-from .distributions import ALD, QuantileALD
+from .distributions import AsymmetricLaplace, QuantileALD
 from .utils import centergap_to_quantiles
 
 __all__ = [
     "AsymmetricLaplaceLikelihood",
-    "MultitaskAsymmetricLaplaceLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputDirectQuantileLikelihood",
@@ -29,24 +28,6 @@ class _ALDLikelihoodBase(Likelihood):
             "kappa", torch.as_tensor(kappa, dtype=torch.get_default_dtype())
         )
         self.noise_covar = noise_covar
-
-    @property
-    def noise(self):
-        r"""The ALD noise variance :math:`\sigma^2`."""
-        return self.noise_covar.noise
-
-    @noise.setter
-    def noise(self, value):
-        self.noise_covar.initialize(noise=value)
-
-    @property
-    def raw_noise(self):
-        """The unconstrained parameter corresponding to :attr:`noise`."""
-        return self.noise_covar.raw_noise
-
-    @raw_noise.setter
-    def raw_noise(self, value):
-        self.noise_covar.initialize(raw_noise=value)
 
     def _shaped_noise_covar(self, base_shape, *params, **kwargs):
         return self.noise_covar(*params, shape=base_shape, **kwargs)
@@ -76,6 +57,32 @@ class _ALDLikelihoodBase(Likelihood):
         if num_event_dim > 1:
             res = res.sum(list(range(-1, -num_event_dim, -1)))
         return res
+
+    def forward(self, function_samples, *params, **kwargs):
+        r"""Return the ALD distribution conditional on latent function samples.
+
+        ``noise`` follows :class:`gpytorch.likelihoods.GaussianLikelihood`'s
+        convention and represents a variance.  The ALD scale parameter is
+        therefore :math:`\lambda = \sqrt{\sigma^2}`.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor
+            Samples of the latent function, with shape ``(*B, N)``.
+
+        Returns
+        -------
+        AsymmetricLaplace
+            An asymmetric Laplace distribution centred at ``function_samples``.
+        """
+        noise = self._shaped_noise_covar(
+            function_samples.shape, *params, **kwargs
+        ).diagonal(dim1=-1, dim2=-2)
+        return AsymmetricLaplace(
+            loc=function_samples,
+            scale=noise.sqrt(),
+            asymmetry=self.kappa.unsqueeze(-1),
+        )
 
 
 class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
@@ -107,32 +114,6 @@ class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
             batch_shape=batch_shape,
         )
         super().__init__(kappa, noise_covar=noise_covar)
-
-    def forward(self, function_samples, *params, **kwargs):
-        r"""Return the ALD distribution conditional on latent function samples.
-
-        ``noise`` follows :class:`gpytorch.likelihoods.GaussianLikelihood`'s
-        convention and represents a variance.  The ALD scale parameter is
-        therefore :math:`\lambda = \sqrt{\sigma^2}`.
-
-        Parameters
-        ----------
-        function_samples : torch.Tensor
-            Samples of the latent function, with shape ``(*B, N)``.
-
-        Returns
-        -------
-        ALD
-            An asymmetric Laplace distribution centred at ``function_samples``.
-        """
-        noise = self._shaped_noise_covar(
-            function_samples.shape, *params, **kwargs
-        ).diagonal(dim1=-1, dim2=-2)
-        return ALD(
-            m=function_samples,
-            lamda=noise.sqrt(),
-            kappa=self.kappa.unsqueeze(-1),
-        )
 
 
 # Old

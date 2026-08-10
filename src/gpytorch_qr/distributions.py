@@ -1,11 +1,36 @@
 """Asymmetric Laplace distributions for Bayesian quantile regression."""
 
 import torch
+from torch.distributions import Laplace
+from torch.distributions.utils import broadcast_all
 
 __all__ = [
+    "AsymmetricLaplace",
     "ALD",
     "QuantileALD",
 ]
+
+
+class AsymmetricLaplace(Laplace):
+    """Asymmetric Laplace distribution.
+
+    Parameters
+    ----------
+    loc : torch.Tensor
+    scale : torch.Tensor
+    asymmetry : torch.Tensor
+        Asymmetry of the distribution.
+    """
+
+    arg_constraints = {
+        "loc": torch.distributions.constraints.real,
+        "scale": torch.distributions.constraints.positive,
+        "asymmetry": torch.distributions.constraints.unit_interval,
+    }
+
+    def __init__(self, loc, scale, asymmetry, validate_args=None):
+        super().__init__(loc, scale, validate_args=validate_args)
+        self.loc, self.scale, self.asymmetry = broadcast_all(loc, scale, asymmetry)
 
 
 class ALD(torch.distributions.Distribution):
