@@ -7,9 +7,7 @@ from torch.distributions import Independent
 from gpytorch_qr.distributions import AsymmetricLaplace, QuantileALD
 from gpytorch_qr.likelihoods import (
     CenterGapQuantileLikelihood,
-    DirectQuantileLikelihood,
     MultiOutputCenterGapQuantileLikelihood,
-    MultiOutputDirectQuantileLikelihood,
     MultitaskAsymmetricLaplaceLikelihood,
     _MultitaskALDLikelihoodBase,
 )
@@ -205,73 +203,6 @@ class TestMultitaskAsymmetricLaplaceLikelihood:
 
 
 # ===========================================================================
-# DirectQuantileLikelihood
-# ===========================================================================
-
-
-class TestDirectQuantileLikelihood:
-    # --- forward ---
-
-    def test_forward_no_batch_returns_quantile_ald(self):
-        lik = DirectQuantileLikelihood(Q_LEVELS)
-        out = lik.forward(torch.randn(S, N, Q))
-        assert isinstance(out, QuantileALD)
-
-    def test_forward_no_batch_m_shape(self):
-        lik = DirectQuantileLikelihood(Q_LEVELS)
-        out = lik.forward(torch.randn(S, N, Q))
-        assert out.m.shape == torch.Size([S, N, Q])
-
-    def test_forward_with_batch_m_shape(self):
-        q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()
-        lik = DirectQuantileLikelihood(q)
-        out = lik.forward(torch.randn(S, B, N, Q))
-        assert out.m.shape == torch.Size([S, B, N, Q])
-
-    def test_forward_m_is_function_samples(self):
-        lik = DirectQuantileLikelihood(Q_LEVELS)
-        fs = torch.randn(S, N, Q)
-        assert torch.equal(lik.forward(fs).m, fs)
-
-    def test_forward_kappa_lamda_shapes_no_batch(self):
-        lik = DirectQuantileLikelihood(Q_LEVELS)
-        out = lik.forward(torch.randn(S, N, Q))
-        assert out.kappa.shape == torch.Size([1, 1, Q])
-        assert out.lamda.shape == torch.Size([1, 1, Q])
-
-    def test_forward_kappa_lamda_shapes_with_batch(self):
-        q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()
-        lik = DirectQuantileLikelihood(q)
-        out = lik.forward(torch.randn(S, B, N, Q))
-        assert out.kappa.shape == torch.Size([1, B, 1, Q])
-        assert out.lamda.shape == torch.Size([1, B, 1, Q])
-
-    def test_forward_kappa_values(self):
-        lik = DirectQuantileLikelihood(Q_LEVELS)
-        out = lik.forward(torch.randn(S, N, Q))
-        assert torch.allclose(out.kappa.squeeze(0), Q_LEVELS)
-
-    # --- expected_log_prob ---
-
-    def test_expected_log_prob_no_batch_shape(self):
-        lik = DirectQuantileLikelihood(Q_LEVELS)
-        obs = torch.randn(N)
-        dist = _make_mtmvn(N, Q)
-        with gpytorch.settings.num_likelihood_samples(3):
-            result = lik.expected_log_prob(obs, dist)
-        assert result.shape == torch.Size([N])
-
-    def test_expected_log_prob_with_batch_shape(self):
-        q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()
-        lik = DirectQuantileLikelihood(q)
-        obs = torch.randn(B, N)
-        dist = _make_mtmvn(N, Q, batch_shape=torch.Size([B]))
-        with gpytorch.settings.num_likelihood_samples(3):
-            result = lik.expected_log_prob(obs, dist)
-        assert result.shape == torch.Size([B, N])
-
-
-# ===========================================================================
 # CenterGapQuantileLikelihood
 # ===========================================================================
 
@@ -409,71 +340,6 @@ class TestCenterGapQuantileLikelihood:
         lik = CenterGapQuantileLikelihood(Q_LEVELS, CENTRAL_IDX)
         obs = torch.randn(N)
         dist = _make_mtmvn(N, Q)
-        with gpytorch.settings.num_likelihood_samples(3):
-            result = lik.expected_log_prob(obs, dist)
-        assert result.shape == torch.Size([N])
-
-
-# ===========================================================================
-# MultiOutputDirectQuantileLikelihood
-# ===========================================================================
-
-
-class TestMultiOutputDirectQuantileLikelihood:
-    def _make_lik(self):
-        return MultiOutputDirectQuantileLikelihood(
-            DirectQuantileLikelihood(Q1_LEVELS),
-            DirectQuantileLikelihood(Q2_LEVELS),
-        )
-
-    # --- forward ---
-
-    def test_forward_output_shape(self):
-        lik = self._make_lik()
-        out = lik.forward(torch.randn(S, N, Q1 + Q2))
-        assert isinstance(out, QuantileALD)
-        assert out.m.shape == torch.Size([S, N, Q1 + Q2])
-
-    def test_forward_asymmetric_output_shape(self):
-        lik = MultiOutputDirectQuantileLikelihood(
-            DirectQuantileLikelihood(torch.tensor([0.1, 0.9])),
-            DirectQuantileLikelihood(torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])),
-        )
-        out = lik.forward(torch.randn(S, N, 7))
-        assert out.m.shape == torch.Size([S, N, 7])
-
-    def test_forward_m_is_function_samples(self):
-        """DirectQuantileLikelihood passes m through unchanged."""
-        lik = self._make_lik()
-        fs = torch.randn(S, N, Q1 + Q2)
-        assert torch.equal(lik.forward(fs).m, fs)
-
-    def test_forward_first_output_m(self):
-        """First Q1 columns of m should match forward of first likelihood alone."""
-        lik = self._make_lik()
-        fs = torch.randn(S, N, Q1 + Q2)
-        out = lik.forward(fs)
-        assert torch.equal(out.m[..., :Q1], fs[..., :Q1])
-
-    def test_forward_second_output_m(self):
-        """Last Q2 columns of m should match forward of second likelihood alone."""
-        lik = self._make_lik()
-        fs = torch.randn(S, N, Q1 + Q2)
-        out = lik.forward(fs)
-        assert torch.equal(out.m[..., Q1:], fs[..., Q1:])
-
-    def test_forward_kappa_values(self):
-        lik = self._make_lik()
-        out = lik.forward(torch.randn(S, N, Q1 + Q2))
-        expected_kappa = torch.cat([Q1_LEVELS, Q2_LEVELS])
-        assert torch.allclose(out.kappa.flatten(), expected_kappa)
-
-    # --- expected_log_prob ---
-
-    def test_expected_log_prob_shape(self):
-        lik = self._make_lik()
-        obs = torch.randn(N, 2)  # K=2 outputs
-        dist = _make_mtmvn(N, Q1 + Q2)
         with gpytorch.settings.num_likelihood_samples(3):
             result = lik.expected_log_prob(obs, dist)
         assert result.shape == torch.Size([N])

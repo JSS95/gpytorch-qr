@@ -8,7 +8,7 @@ from gpytorch.variational import (
     VariationalStrategy,
 )
 
-from gpytorch_qr.likelihoods import DirectQuantileLikelihood
+from gpytorch_qr.likelihoods import DirectQuantilesLikelihood
 from gpytorch_qr.models import DirectQuantileGP
 
 
@@ -51,7 +51,7 @@ def test_mtgpqr():
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     gp = MyGP(inducing_points, len(q), num_latents=7)
-    likelihood = DirectQuantileLikelihood(q)
+    likelihood = DirectQuantilesLikelihood(q)
 
     gp.train()
     likelihood.train()
@@ -78,7 +78,6 @@ def test_mtgpqr():
         gp.mean_quantiles_delta(x_pred)
         gp.quantile_quantiles(x_pred, torch.tensor([0.025, 0.975]))
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
-        likelihood.predictive_posterior(gp(x_pred))
 
 
 def test_mtgpqr_multivariate():
@@ -132,7 +131,7 @@ def test_mtgpqr_multivariate():
     )
     inducing_points = torch.stack([g1.flatten(), g2.flatten()], dim=1)
     gp = MyGP(inducing_points, len(q), num_latents=3)
-    likelihood = DirectQuantileLikelihood(q)
+    likelihood = DirectQuantilesLikelihood(q)
 
     gp.train()
     likelihood.train()
@@ -159,4 +158,3 @@ def test_mtgpqr_multivariate():
         gp.mean_quantiles_delta(x_pred)
         gp.quantile_quantiles(x_pred, torch.tensor([0.025, 0.975]))
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
-        likelihood.predictive_posterior(gp(x_pred))
