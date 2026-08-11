@@ -6,6 +6,7 @@ from torch.distributions import Independent
 
 from gpytorch_qr.distributions import AsymmetricLaplace, QuantileALD
 from gpytorch_qr.likelihoods import (
+    AsymmetricLaplaceLikelihood,
     CenterGapQuantileLikelihood,
     MultiOutputCenterGapQuantileLikelihood,
     MultitaskAsymmetricLaplaceLikelihood,
@@ -53,6 +54,28 @@ def _make_mtmvn(N, T, batch_shape=torch.Size([])):
 
 
 # ===========================================================================
+# AsymmetricLaplaceLikelihood
+# ===========================================================================
+
+
+class TestAsymmetricLaplaceLikelihood:
+    def test_exposes_noise_parameters(self):
+        likelihood = AsymmetricLaplaceLikelihood(1.0)
+        likelihood.noise = 0.4
+
+        assert torch.allclose(likelihood.noise, torch.tensor([0.4]))
+        assert likelihood.raw_noise is likelihood.noise_covar.raw_noise
+
+    def test_forward_converts_squared_scale_to_ald_rate(self):
+        likelihood = AsymmetricLaplaceLikelihood(2.0)
+        likelihood.noise = 0.25
+
+        output = likelihood(torch.zeros(N))
+
+        assert torch.allclose(output.scale, torch.full((N,), 0.8))
+
+
+# ===========================================================================
 # MultitaskAsymmetricLaplaceLikelihood
 # ===========================================================================
 
@@ -64,56 +87,22 @@ class TestMultitaskAsymmetricLaplaceLikelihood:
             _MultitaskALDLikelihoodBase,
         )
 
-    def test_base_initializes_task_correlation_parameters_with_batch_shape(self):
-        noise_covar = HomoskedasticNoise()
-        likelihood = _MultitaskALDLikelihoodBase(
-            Q1_LEVELS,
-            Q1,
-            noise_covar,
-            rank=2,
-            batch_shape=torch.Size([B]),
-        )
+    def test_base_rejects_correlated_task_noise(self):
+        with pytest.raises(NotImplementedError, match="rank must be 0"):
+            _MultitaskALDLikelihoodBase(
+                Q1_LEVELS,
+                Q1,
+                HomoskedasticNoise(),
+                rank=2,
+            )
 
-        correlation = likelihood._eval_corr_matrix()
-
-        assert likelihood.noise_covar is noise_covar
-        assert likelihood.task_noise_corr.shape == torch.Size([B, 4])
-        assert correlation.shape == torch.Size([B, Q1, Q1])
-        assert torch.allclose(
-            correlation.diagonal(dim1=-1, dim2=-2),
-            torch.ones(B, Q1),
-        )
-        assert torch.allclose(correlation, correlation.transpose(-1, -2))
-
-    def test_base_registers_task_correlation_prior(self):
-        likelihood = _MultitaskALDLikelihoodBase(
-            Q1_LEVELS,
-            Q1,
-            HomoskedasticNoise(),
-            rank=2,
-            task_correlation_prior=gpytorch.priors.NormalPrior(0, 1),
-        )
-
-        prior_names = [name for name, *_ in likelihood.named_priors()]
-
-        assert "MultitaskErrorCorrelationPrior" in prior_names
-
-    def test_base_rejects_correlation_prior_when_rank_is_zero(self):
-        with pytest.raises(ValueError, match="task_correlation_prior if rank>0"):
+    def test_base_rejects_task_correlation_prior(self):
+        with pytest.raises(ValueError, match="task_correlation_prior is unsupported"):
             _MultitaskALDLikelihoodBase(
                 Q1_LEVELS,
                 Q1,
                 HomoskedasticNoise(),
                 task_correlation_prior=gpytorch.priors.NormalPrior(0, 1),
-            )
-
-    def test_base_rejects_rank_greater_than_num_tasks(self):
-        with pytest.raises(ValueError, match="Cannot have rank"):
-            _MultitaskALDLikelihoodBase(
-                Q1_LEVELS,
-                Q1,
-                HomoskedasticNoise(),
-                rank=Q1 + 1,
             )
 
     def test_forward_returns_independent_ald_with_task_event(self):
@@ -131,7 +120,10 @@ class TestMultitaskAsymmetricLaplaceLikelihood:
         likelihood.task_noises = torch.tensor([0.1, 0.3, 0.5])
 
         output = likelihood(torch.zeros(N, Q1))
-        expected_scale = torch.tensor([0.3, 0.5, 0.7]).sqrt().expand(N, Q1)
+        noise = torch.tensor([0.3, 0.5, 0.7])
+        expected_scale = (Q1_LEVELS / ((1 + Q1_LEVELS.square()) * noise.sqrt())).expand(
+            N, Q1
+        )
 
         assert torch.allclose(output.base_dist.scale, expected_scale)
         assert torch.equal(output.base_dist.asymmetry[0], Q1_LEVELS)
@@ -156,27 +148,9 @@ class TestMultitaskAsymmetricLaplaceLikelihood:
         assert output.base_dist.scale.shape == torch.Size([S, B, N, Q1])
         assert output.base_dist.asymmetry.shape == torch.Size([S, B, N, Q1])
 
-    def test_ranked_task_noise_builds_repeated_covariance_blocks(self):
-        likelihood = MultitaskAsymmetricLaplaceLikelihood(
-            1.0,
-            Q1,
-            rank=Q1,
-            has_global_noise=False,
-        )
-        covariance = torch.tensor(
-            [
-                [2.0, 0.5, 0.25],
-                [0.5, 1.5, 0.1],
-                [0.25, 0.1, 1.0],
-            ]
-        )
-        likelihood.task_noise_covar = covariance
-
-        shaped = likelihood._shaped_noise_covar(torch.Size([2, Q1])).to_dense()
-
-        assert torch.allclose(shaped[:Q1, :Q1], covariance, atol=1e-5)
-        assert torch.allclose(shaped[Q1:, Q1:], covariance, atol=1e-5)
-        assert torch.count_nonzero(shaped[:Q1, Q1:]) == 0
+    def test_concrete_rejects_correlated_task_noise(self):
+        with pytest.raises(NotImplementedError, match="rank must be 0"):
+            MultitaskAsymmetricLaplaceLikelihood(1.0, Q1, rank=Q1)
 
     def test_global_noise_only(self):
         likelihood = MultitaskAsymmetricLaplaceLikelihood(
@@ -188,7 +162,11 @@ class TestMultitaskAsymmetricLaplaceLikelihood:
 
         output = likelihood(torch.zeros(N, Q1))
 
-        assert torch.allclose(output.base_dist.scale, torch.full((N, Q1), 0.4**0.5))
+        expected_rate = 1 / (2 * 0.4**0.5)
+        assert torch.allclose(
+            output.base_dist.scale,
+            torch.full((N, Q1), expected_rate),
+        )
 
     def test_rejects_invalid_configuration(self):
         with pytest.raises(ValueError, match="no noise terms"):
