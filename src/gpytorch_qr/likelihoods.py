@@ -505,8 +505,9 @@ class _DirectQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
         has_global_noise=True,
         has_task_noise=True,
     ):
-        kappa = torch.cat(quantile_levels, dim=-1)
-        num_tasks = kappa.shape[-1]
+        quantile_levels_tensor = torch.cat(quantile_levels, dim=-1)
+        kappa = (quantile_levels_tensor / (1 - quantile_levels_tensor)).sqrt()
+        num_tasks = quantile_levels_tensor.shape[-1]
         super().__init__(
             kappa=kappa,
             num_tasks=num_tasks,
@@ -672,8 +673,9 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
         has_global_noise=True,
         has_task_noise=True,
     ):
-        kappa = torch.cat(quantile_levels, dim=-1)
-        num_tasks = kappa.shape[-1]
+        quantile_levels_tensor = torch.cat(quantile_levels, dim=-1)
+        kappa = (quantile_levels_tensor / (1 - quantile_levels_tensor)).sqrt()
+        num_tasks = quantile_levels_tensor.shape[-1]
         super().__init__(
             kappa=kappa,
             num_tasks=num_tasks,
