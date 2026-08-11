@@ -21,11 +21,16 @@ from .utils import centergap_to_quantiles
 __all__ = [
     "AsymmetricLaplaceLikelihood",
     "MultitaskAsymmetricLaplaceLikelihood",
+    "DirectQuantilesLikelihood",
+    "MultitaskDirectQuantilesLikelihood",
     "DirectQuantileLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputDirectQuantileLikelihood",
     "MultiOutputCenterGapQuantileLikelihood",
 ]
+
+
+# ALD likelihood compatible with GPyTorch's Gaussian likelihood interface
 
 
 class _ALDLikelihoodBase(Likelihood):
@@ -109,6 +114,11 @@ class AsymmetricLaplaceLikelihood(_ALDLikelihoodBase):
         Constraint for noise parameter :math:`\sigma^2`.
     batch_shape: torch.Size, default=torch.Size()
         The batch shape of the learned noise parameter.
+
+    See Also
+    --------
+    gpytorch.likelihoods.GaussianLikelihood
+        Gaussian distribution equivalent of this likelihood.
     """
 
     def __init__(
@@ -277,9 +287,9 @@ class _MultitaskALDLikelihoodBase(_ALDLikelihoodBase):
         base_distribution = AsymmetricLaplace(
             loc=function_samples,
             scale=noise.sqrt(),
-            asymmetry=self.kappa.unsqueeze(-2),
-        )
-        return Independent(base_distribution, 1)
+            asymmetry=self.kappa.unsqueeze(-2),  # (1, T)
+        )  # batch_shape: (*B, N, T), event_shape: ()
+        return Independent(base_distribution, 1)  # batch: (*B, N), event: (T,)
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):
         # forward() already treats the task axis as an event, so GPyTorch's
@@ -295,8 +305,7 @@ class MultitaskAsymmetricLaplaceLikelihood(_MultitaskALDLikelihoodBase):
     Parameters
     ----------
     kappa : torch.Tensor
-        Positive asymmetry parameter shared across tasks, or parameters with
-        trailing dimension ``1`` or ``num_tasks``.
+        Asymmetry parameter of the asymmetric Laplace distribution.
     num_tasks : int
         Number of tasks.
     rank : int, default=0
@@ -314,6 +323,11 @@ class MultitaskAsymmetricLaplaceLikelihood(_MultitaskALDLikelihoodBase):
         Whether to include the shared :math:`\sigma^2` variance.
     has_task_noise : bool, default=True
         Whether to include task-specific noise variances.
+
+    See Also
+    --------
+    gpytorch.likelihoods.MultitaskGaussianLikelihood
+        Multitask Gaussian distribution equivalent of this likelihood.
     """
 
     def __init__(
@@ -459,6 +473,171 @@ class MultitaskAsymmetricLaplaceLikelihood(_MultitaskALDLikelihoodBase):
             covariance_factor.matmul(covariance_factor.transpose(-1, -2))
             + noise.unsqueeze(-1) * identity
         )
+
+
+# Special likelihoods for quantile regression
+
+
+class _DirectQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
+    """Likelihood for GPQR with direct quantile representation.
+
+    Parameters
+    ----------
+    quantile_levels : list of torch.Tensor
+        Tensors whose last dimension corresponds to quantile levels.
+        Each tensor in the list corresponds to quantile levels in each output dimension.
+    rank
+    batch_shape
+    task_prior
+    noise_prior
+    noise_constraint
+    has_global_noise
+    has_task_noise
+    """
+
+    def __init__(
+        self,
+        quantile_levels,
+        rank=0,
+        batch_shape=torch.Size(),
+        task_prior=None,
+        noise_prior=None,
+        noise_constraint=None,
+        has_global_noise=True,
+        has_task_noise=True,
+    ):
+        kappa = torch.cat(quantile_levels, dim=-1)
+        num_tasks = kappa.shape[-1]
+        super().__init__(
+            kappa=kappa,
+            num_tasks=num_tasks,
+            rank=rank,
+            batch_shape=batch_shape,
+            task_prior=task_prior,
+            noise_prior=noise_prior,
+            noise_constraint=noise_constraint,
+            has_global_noise=has_global_noise,
+            has_task_noise=has_task_noise,
+        )
+        self.register_buffer(
+            "num_quantiles",
+            torch.tensor([q.shape[-1] for q in quantile_levels], dtype=torch.long),
+        )
+
+
+class DirectQuantilesLikelihood(_DirectQuantilesLikelihoodBase):
+    """Likelihood for single-output GPQR with direct quantile representation.
+
+    Parameters
+    ----------
+    quantile_levels : torch.Tensor with shape ``(*B, Q)``
+        The quantile levels.
+    rank
+    batch_shape
+    task_prior
+    noise_prior
+    noise_constraint
+    has_global_noise
+    has_task_noise
+    """
+
+    def __init__(
+        self,
+        quantile_levels,
+        rank=0,
+        batch_shape=torch.Size(),
+        task_prior=None,
+        noise_prior=None,
+        noise_constraint=None,
+        has_global_noise=True,
+        has_task_noise=True,
+    ):
+        super().__init__(
+            [quantile_levels],
+            rank,
+            batch_shape,
+            task_prior,
+            noise_prior,
+            noise_constraint,
+            has_global_noise,
+            has_task_noise,
+        )
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            Latent GP posterior at the observed locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N, Q)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        likelihood_samples = self._draw_likelihood_samples(
+            function_dist, *args, **kwargs
+        )  # batch shape: (*B, N), event_shape: (Q,)
+        res = likelihood_samples.log_prob(
+            observations.unsqueeze(-1), *args, **kwargs
+        ).mean(dim=0)
+        return res
+
+
+class MultitaskDirectQuantilesLikelihood(_DirectQuantilesLikelihoodBase):
+    """Likelihood for multi-output GPQR with direct quantile representation.
+
+    Parameters
+    ----------
+    quantile_levels
+    rank
+    batch_shape
+    task_prior
+    noise_prior
+    noise_constraint
+    has_global_noise
+    has_task_noise
+    """
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N, D)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            Latent GP posterior at the observed locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N, Q)``
+            The expected log probability of the observed data under the ALD likelihood.
+
+        Notes
+        -----
+        The last dimension of *observations* is the output dimension, which is not the
+        task dimension. The task dimension is the sum of all number of quantiles across
+        all output dimensions, i.e., ``T = Q_1 + Q_2 + ... + Q_D``.
+        """
+        likelihood_samples = self._draw_likelihood_samples(
+            function_dist, *args, **kwargs
+        )  # batch shape: (*B, N), event_shape: (T,)
+        each_observation = []
+        for i, n in enumerate(self.num_quantiles):
+            each_observation.append(
+                observations[..., i]
+                .unsqueeze(-1)
+                .expand(*[-1 for _ in range(observations.ndim - 1)], n)
+            )
+        expanded_observations = torch.cat(each_observation, dim=-1)
+        res = likelihood_samples.log_prob(expanded_observations, *args, **kwargs).mean(
+            dim=0
+        )
+        return res
 
 
 # Old
