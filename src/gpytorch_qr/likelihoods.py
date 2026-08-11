@@ -211,6 +211,10 @@ class _MultitaskALDLikelihoodBase(_ALDLikelihoodBase):
                 "Correlated asymmetric Laplace task noise is not implemented; "
                 "rank must be 0."
             )
+        if task_correlation_prior is not None:
+            raise ValueError(
+                "task_correlation_prior is unsupported because rank must be 0"
+            )
 
         self.num_tasks = num_tasks
         self.rank = rank
@@ -673,7 +677,8 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
 
         # 2. Convert center-gap function_samples to quantiles
         quantiles = []
-        for samples, lc in zip(each_samples, self.lower_counts):
+        for i, samples in enumerate(each_samples):
+            lc = self.lower_counts[..., i]
             q = self._convert_to_quantiles(samples, lc)
             quantiles.append(q)
         quantile_function_samples = torch.cat(quantiles, dim=-1)  # (*B, N, T)
