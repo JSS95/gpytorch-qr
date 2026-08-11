@@ -66,6 +66,6 @@ Here, correlation between :math:`f_i(x)` dictates correlation between gaps :math
    :caption: Advanced usage
 
    advanced_usage/prior_mean.ipynb
-   advanced_usage/lengthscale.ipynb
+   advanced_usage/hyperparam_prior.ipynb
    advanced_usage/multi_output.ipynb
    advanced_usage/cross_validation.ipynb
