@@ -8,7 +8,10 @@ from gpytorch.variational import (
     VariationalStrategy,
 )
 
-from gpytorch_qr.likelihoods import DirectQuantilesLikelihood
+from gpytorch_qr.likelihoods import (
+    DirectQuantilesLikelihood,
+    MultioutputDirectQuantilesLikelihood,
+)
 from gpytorch_qr.models import DirectQuantileGP
 
 
@@ -150,6 +153,81 @@ def test_mtgpqr_multivariate():
 
     gp.eval()
     x_pred = torch.tensor([[0.0, 0.1], [1.0, 0.5]])
+    with torch.no_grad():
+        gp.joint_quantile_posterior(x_pred)
+        gp.marginal_quantile_posterior(x_pred)
+        gp.mean_quantiles(x_pred)
+        gp.mean_quantiles_mc(x_pred, num_samples=1)
+        gp.mean_quantiles_delta(x_pred)
+        gp.quantile_quantiles(x_pred, torch.tensor([0.025, 0.975]))
+        gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
+
+
+def test_mtgpqr_multioutput():
+    def mean1(x):
+        return torch.cos(x.squeeze(-1) * 2 * 3.14)
+
+    def mean2(x):
+        return torch.sin(x.squeeze(-1) * 2 * 3.14)
+
+    def std(x):
+        return x + 0.1
+
+    x_range = torch.linspace(0, 1, 10).reshape(-1, 1)
+    x = x_range.repeat(2, 1)
+    y1 = mean1(x).unsqueeze(-1) + torch.randn(x.shape).mul(std(x))
+    y2 = mean2(x).unsqueeze(-1) + torch.randn(x.shape).mul(std(x))
+    y = torch.concatenate([y1, y2], dim=-1)
+
+    q1 = torch.tensor([0.1, 0.5, 0.9])
+    q2 = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
+
+    class MyGP(DirectQuantileGP):
+        def __init__(self, inducing_points, num_quantiles, num_latents):
+            N, D = inducing_points.size()
+            variational_distribution = CholeskyVariationalDistribution(
+                N,
+                batch_shape=torch.Size([num_latents]),
+            )
+            variational_strategy = LMCVariationalStrategy(
+                VariationalStrategy(
+                    self,
+                    inducing_points,
+                    variational_distribution,
+                    learn_inducing_locations=True,
+                ),
+                num_tasks=num_quantiles,
+                num_latents=num_latents,
+            )
+
+            mean_module = ConstantMean(batch_shape=torch.Size([num_latents]))
+            covar_module = ScaleKernel(
+                RBFKernel(ard_num_dims=D, batch_shape=torch.Size([num_latents])),
+                batch_shape=torch.Size([num_latents]),
+            )
+            super().__init__(variational_strategy, mean_module, covar_module)
+
+    inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
+    gp = MyGP(inducing_points, len(q1) + len(q2), num_latents=7)
+    likelihood = MultioutputDirectQuantilesLikelihood([q1, q2])
+
+    gp.train()
+    likelihood.train()
+    mll = VariationalELBO(likelihood, gp, num_data=y.numel())
+    optimizer = torch.optim.Adam(
+        list(gp.parameters()) + list(likelihood.parameters()),
+        lr=0.01,
+    )
+
+    for _ in range(1):
+        output = gp(x)
+        loss = -mll(output, y)
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+    gp.eval()
+    x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
         gp.joint_quantile_posterior(x_pred)
         gp.marginal_quantile_posterior(x_pred)
