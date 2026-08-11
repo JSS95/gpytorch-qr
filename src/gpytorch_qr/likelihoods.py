@@ -23,6 +23,7 @@ __all__ = [
     "MultitaskAsymmetricLaplaceLikelihood",
     "DirectQuantilesLikelihood",
     "MultioutputDirectQuantilesLikelihood",
+    "CenterGapQuantilesLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputCenterGapQuantileLikelihood",
 ]
@@ -635,6 +636,213 @@ class MultioutputDirectQuantilesLikelihood(_DirectQuantilesLikelihoodBase):
         res = likelihood_samples.log_prob(expanded_observations, *args, **kwargs).mean(
             dim=0
         )
+        return res
+
+
+class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
+    """Likelihood for GPQR with center-gap quantile representation.
+
+    Parameters
+    ----------
+    quantile_levels : list of torch.Tensor
+        Tensors whose last dimension corresponds to quantile levels.
+        Each tensor in the list corresponds to quantile levels in each output dimension.
+    central_quantile_idxs : list of int or torch.Tensor
+        The indices of the central quantiles for each quantile level tensor.
+        Can have batch shape to apply different central quantile indices for
+        different batches.
+    rank
+    batch_shape
+    task_prior
+    noise_prior
+    noise_constraint
+    has_global_noise
+    has_task_noise
+    """
+
+    def __init__(
+        self,
+        quantile_levels,
+        central_quantile_idxs,
+        rank=0,
+        batch_shape=torch.Size(),
+        task_prior=None,
+        noise_prior=None,
+        noise_constraint=None,
+        has_global_noise=True,
+        has_task_noise=True,
+    ):
+        kappa = torch.cat(quantile_levels, dim=-1)
+        num_tasks = kappa.shape[-1]
+        super().__init__(
+            kappa=kappa,
+            num_tasks=num_tasks,
+            rank=rank,
+            batch_shape=batch_shape,
+            task_prior=task_prior,
+            noise_prior=noise_prior,
+            noise_constraint=noise_constraint,
+            has_global_noise=has_global_noise,
+            has_task_noise=has_task_noise,
+        )
+        self.register_buffer(
+            "num_quantiles",
+            torch.tensor([q.shape[-1] for q in quantile_levels], dtype=torch.long),
+        )
+        lower_counts = []
+        for q, idx in zip(quantile_levels, central_quantile_idxs):
+            idx = torch.as_tensor(idx, dtype=torch.long)
+            if idx.dim() == 0:
+                idx_for_gather = idx.view(1).expand(list(q.shape[:-1]) + [1])  # (*B, 1)
+            else:
+                idx_for_gather = idx.unsqueeze(-1)  # (*B, 1)
+            idx_for_gather = idx_for_gather.to(q.device)
+            central_quantile = q.gather(-1, idx_for_gather).squeeze(-1)  # (*B)
+            lower_count = (q < central_quantile.unsqueeze(-1)).sum(dim=-1)  # (*B)
+            lower_counts.append(lower_count.unsqueeze(-1))
+        self.register_buffer("lower_counts", torch.cat(lower_counts, dim=-1))
+
+    def forward(self, function_samples):
+        """Return the ALD distribution for the given function samples.
+
+        Parameters
+        ----------
+        function_samples : torch.Tensor with shape ``(*B, N, T)``
+            Samples from the multitask latent function in center-gap representation.
+
+        Notes
+        -----
+        The task dimension of the input *function_samples* should be structured as
+
+        .. code-block:: text
+
+            [c_1, c_2, ..., c_k,  *L_1, *U_1,  *L_2, *U_2,  ...,  *L_k, *U_k]
+
+        where ``c_i`` is the central quantile for the i-th output dimension,
+        ``L_i`` contains the pre-softplus-transformed lower gaps,
+        and ``U_i`` contains the pre-softplus-transformed upper gaps.
+        """
+        # 1. Restructure multi-output *function_samples*.
+        each_samples = []  # [c_1, *L_1, *U_1], [c_2, *L_2, *U_2], ...
+        gap_idx = len(
+            self.num_quantiles
+        )  # index of the first gap in the task dimension
+        for i in range(len(self.num_quantiles)):
+            num_quantiles = self.num_quantiles[i]
+            num_gaps = num_quantiles - 1
+
+            center = function_samples[..., i].unsqueeze(-1)
+            gaps = function_samples[..., gap_idx : gap_idx + num_gaps]
+            each_samples.append(torch.cat([center, gaps], dim=-1))
+            gap_idx += num_gaps
+
+        # 2. Convert center-gap function_samples to quantiles
+        quantiles = []
+        for samples, lc in zip(each_samples, self.lower_counts):
+            q = self._convert_to_quantiles(samples, lc)
+            quantiles.append(q)
+        quantile_function_samples = torch.cat(quantiles, dim=-1)  # (*B, N, T)
+        return super().forward(quantile_function_samples)
+
+    @staticmethod
+    def _convert_to_quantiles(samples, lc):
+        if lc.dim() == 0:
+            lc_int = int(lc)
+            center = samples[..., :1]
+            lower_gaps = samples[..., 1 : 1 + lc_int]
+            upper_gaps = samples[..., 1 + lc_int :]
+            quantiles = centergap_to_quantiles(center, lower_gaps, upper_gaps)
+        else:
+            # Derive actual batch shape from samples, not from lc,
+            # because lc may have been computed from a broadcasted kappa.
+            S = samples.shape[0]
+            N = samples.shape[-2]
+            Q = samples.shape[-1]
+            B_shape = samples.shape[1:-2]  # actual (*B)
+            B_flat = 1
+            for d in B_shape:
+                B_flat *= d
+            # Flatten *B: (S, B_flat, N, Q)
+            fs_flat = samples.reshape(S, B_flat, N, Q)
+            lc_flat = lc.reshape(-1).expand(B_flat)  # broadcast lc to (B_flat,)
+            quantiles_flat = torch.empty_like(fs_flat)
+            for unique_lc in lc_flat.unique():
+                lc_val = int(unique_lc)
+                mask = lc_flat == unique_lc
+                fs_group = fs_flat[:, mask, :, :]  # (S, G, N, Q)
+                center = fs_group[..., :1]
+                lower_gaps = fs_group[..., 1 : 1 + lc_val]
+                upper_gaps = fs_group[..., 1 + lc_val :]
+                quantiles_flat[:, mask, :, :] = centergap_to_quantiles(
+                    center, lower_gaps, upper_gaps
+                )
+            quantiles = quantiles_flat.reshape(S, *B_shape, N, Q)
+        return quantiles
+
+
+class CenterGapQuantilesLikelihood(_CenterGapQuantilesLikelihoodBase):
+    """Likelihood for single-output GPQR with center-gap quantile representation.
+
+    Parameters
+    ----------
+    quantile_levels : torch.Tensor with shape ``(*B, Q)``
+        The quantile levels.
+    central_quantile_idx : int or torch.Tensor with shape ``(*B)``
+        The index of the central quantile in the quantile levels.
+    rank
+    batch_shape
+    task_prior
+    noise_prior
+    noise_constraint
+    has_global_noise
+    has_task_noise
+    """
+
+    def __init__(
+        self,
+        quantile_levels,
+        central_quantile_idx,
+        rank=0,
+        batch_shape=torch.Size(),
+        task_prior=None,
+        noise_prior=None,
+        noise_constraint=None,
+        has_global_noise=True,
+        has_task_noise=True,
+    ):
+        super().__init__(
+            [quantile_levels],
+            [central_quantile_idx],
+            rank,
+            batch_shape,
+            task_prior,
+            noise_prior,
+            noise_constraint,
+            has_global_noise,
+            has_task_noise,
+        )
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            Latent GP posterior at the observed locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N, Q)``
+            The expected log probability of the observed data under the ALD likelihood.
+        """
+        likelihood_samples = self._draw_likelihood_samples(
+            function_dist, *args, **kwargs
+        )  # batch shape: (*B, N), event_shape: (Q,)
+        res = likelihood_samples.log_prob(
+            observations.unsqueeze(-1), *args, **kwargs
+        ).mean(dim=0)
         return res
 
 
