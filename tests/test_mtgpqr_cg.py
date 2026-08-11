@@ -4,7 +4,7 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
-from gpytorch_qr.likelihoods import CenterGapQuantileLikelihood
+from gpytorch_qr.likelihoods import CenterGapQuantilesLikelihood
 from gpytorch_qr.models import CenterGapQuantileGP
 from gpytorch_qr.variational import CenterGapLMCVariationalStrategy
 
@@ -64,7 +64,7 @@ def test_mtgpqr_cg():
     central_q_index = 2
     num_latents = 7
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents)
-    likelihood = CenterGapQuantileLikelihood(q, central_q_index)
+    likelihood = CenterGapQuantilesLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()
@@ -88,7 +88,7 @@ def test_mtgpqr_cg():
         gp.mean_quantiles_mc(x_pred, num_samples=1)
         gp.mean_quantiles_delta(x_pred)
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
-        likelihood.predictive_posterior(gp(x_pred))
+        likelihood(gp(x_pred))
 
 
 def test_mtgpqr_cg_multivariate():
@@ -158,7 +158,7 @@ def test_mtgpqr_cg_multivariate():
     central_q_index = 1
     num_latents = 3
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents)
-    likelihood = CenterGapQuantileLikelihood(q, central_q_index)
+    likelihood = CenterGapQuantilesLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()
@@ -182,4 +182,4 @@ def test_mtgpqr_cg_multivariate():
         gp.mean_quantiles_mc(x_pred, num_samples=1)
         gp.mean_quantiles_delta(x_pred)
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
-        likelihood.predictive_posterior(gp(x_pred))
+        likelihood(gp(x_pred))
