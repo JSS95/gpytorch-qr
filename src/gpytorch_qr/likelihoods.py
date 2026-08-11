@@ -21,6 +21,7 @@ __all__ = [
     "DirectQuantilesLikelihood",
     "MultioutputDirectQuantilesLikelihood",
     "CenterGapQuantilesLikelihood",
+    "MultioutputCenterGapQuantilesLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputCenterGapQuantileLikelihood",
 ]
@@ -780,6 +781,60 @@ class CenterGapQuantilesLikelihood(_CenterGapQuantilesLikelihoodBase):
         res = likelihood_samples.log_prob(
             observations.unsqueeze(-1), *args, **kwargs
         ).mean(dim=0)
+        return res
+
+
+class MultioutputCenterGapQuantilesLikelihood(_CenterGapQuantilesLikelihoodBase):
+    """Likelihood for multi-output GPQR with center-gap quantile representation.
+
+    Parameters
+    ----------
+    quantile_levels
+    central_quantile_idxs
+    rank
+    batch_shape
+    task_prior
+    noise_prior
+    noise_constraint
+    has_global_noise
+    has_task_noise
+    """
+
+    def expected_log_prob(self, observations, function_dist, *args, **kwargs):
+        """Expected log probability of the observed data under the ALD likelihood.
+
+        Parameters
+        ----------
+        observations : torch.Tensor with shape ``(*B, N, D)``
+            The observed response variables.
+        function_dist : torch.distributions.Distribution
+            Latent GP posterior at the observed locations.
+
+        Returns
+        -------
+        torch.Tensor with shape ``(*B, N, Q)``
+            The expected log probability of the observed data under the ALD likelihood.
+
+        Notes
+        -----
+        The last dimension of *observations* is the output dimension, which is not the
+        task dimension. The task dimension is the sum of all number of quantiles across
+        all output dimensions, i.e., ``T = Q_1 + Q_2 + ... + Q_D``.
+        """
+        likelihood_samples = self._draw_likelihood_samples(
+            function_dist, *args, **kwargs
+        )  # batch shape: (*B, N), event_shape: (T,)
+        each_observation = []
+        for i, n in enumerate(self.num_quantiles):
+            each_observation.append(
+                observations[..., i]
+                .unsqueeze(-1)
+                .expand(*[-1 for _ in range(observations.ndim - 1)], n)
+            )
+        expanded_observations = torch.cat(each_observation, dim=-1)
+        res = likelihood_samples.log_prob(expanded_observations, *args, **kwargs).mean(
+            dim=0
+        )
         return res
 
 
