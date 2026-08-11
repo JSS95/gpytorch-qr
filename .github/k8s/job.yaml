@@ -47,9 +47,10 @@ spec:
               exec:
                 command:
                   - /bin/bash
-                  - -euc
+                  - -c
                   - |
-                    bash -euo pipefail .github/k8s/monitor-heartbeat.sh
+                    cd /sidecar
+                    bash -euo pipefail .github/k8s/monitor-heartbeat.sh >/dev/null 2>&1 &
           command: ["bash", "-euc"]
           args:
             - |
@@ -99,11 +100,8 @@ spec:
             preStop:
               exec:
                 command:
-                  - /bin/bash
-                  - -euc
-                  - |
-                    cd /workspace
-                    bash -euo pipefail .github/k8s/build-heartbeat.sh finish cancelled
+                  - /usr/bin/touch
+                  - /heartbeat/build-cancelled
           resources:
             requests:
               memory: "16Gi"
