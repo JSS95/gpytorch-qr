@@ -22,7 +22,7 @@ __all__ = [
     "AsymmetricLaplaceLikelihood",
     "MultitaskAsymmetricLaplaceLikelihood",
     "DirectQuantilesLikelihood",
-    "MultitaskDirectQuantilesLikelihood",
+    "MultioutputDirectQuantilesLikelihood",
     "CenterGapQuantileLikelihood",
     "MultiOutputCenterGapQuantileLikelihood",
 ]
@@ -585,7 +585,7 @@ class DirectQuantilesLikelihood(_DirectQuantilesLikelihoodBase):
         return res
 
 
-class MultitaskDirectQuantilesLikelihood(_DirectQuantilesLikelihoodBase):
+class MultioutputDirectQuantilesLikelihood(_DirectQuantilesLikelihoodBase):
     """Likelihood for multi-output GPQR with direct quantile representation.
 
     Parameters
