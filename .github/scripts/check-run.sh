@@ -62,6 +62,7 @@ payload["output"] = {"title": title, "summary": history[-60000:]}
 print(json.dumps(payload))
 ' "$check_status" "$check_conclusion" "$check_title" "$check_summary" "$current_check" "${GITHUB_CHECK_RUN_NAME:-}")"
 curl --fail --silent --show-error --request PATCH \
+  --output /dev/null \
   --header "Authorization: Bearer $installation_token" \
   --header 'Accept: application/vnd.github+json' \
   --header 'Content-Type: application/json' \
