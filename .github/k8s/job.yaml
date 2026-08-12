@@ -150,11 +150,11 @@ spec:
                 in_progress "" "Build succeeded"
 
               if [ "$GITHUB_EVENT_NAME" = "release" ]; then
-                bash -euo pipefail .github/k8s/retry.sh "Artifact upload" \
+                bash -euo pipefail .github/k8s/retry.sh --attempts 3 --sleep 60 "Artifact upload" \
                   bash -euo pipefail .github/k8s/upload-artifact.sh
                 bash -euo pipefail .github/scripts/check-run.sh \
                   in_progress "" "Artifact upload succeeded"
-                bash -euo pipefail .github/k8s/retry.sh "Documentation dispatch" \
+                bash -euo pipefail .github/k8s/retry.sh --attempts 3 --sleep 60 "Documentation dispatch" \
                   bash -euo pipefail .github/k8s/dispatch-doc.sh
                 bash -euo pipefail .github/scripts/check-run.sh \
                   in_progress "" "Documentation dispatch succeeded"
