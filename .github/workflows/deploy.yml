@@ -71,7 +71,7 @@ jobs:
             exit 1
           fi
 
-          kubectl create secret generic github-app \
+          kubectl create secret generic gpytorch-qr-github-app \
             --from-literal=GH_APP_ID="$GH_APP_ID" \
             --from-literal=GH_APP_PRIVATE_KEY="$GH_APP_PRIVATE_KEY" \
             --namespace="$KUBE_NAMESPACE" \
@@ -82,15 +82,6 @@ jobs:
         shell: bash
         env:
           GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          GITHUB_RELEASE_ID: ${{ github.event.release.id }}
-          GITHUB_RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
-          GITHUB_CHECK_RUN_ID: ${{ steps.checks.outputs.k8s-check-run-id }}
-          PUBLISH_DOC_CHECK_RUN_ID: ${{ inputs.publish_doc_check_run_id }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
           KUBE_NAMESPACE: ${{ secrets.KUBE_NAMESPACE }}
           KUBE_USERNAME: ${{ secrets.KUBE_USERNAME }}
           TTL_SECONDS_AFTER_FINISHED: ${{ vars.TTL_SECONDS_AFTER_FINISHED }}
@@ -99,10 +90,31 @@ jobs:
           GPU_REQUEST: ${{ vars.GPU_REQUEST }}
         run: |
           event_name="${{ github.event_name }}"
-          job_name="gpytorch-qr.${GIT_SHA::7}-${event_name//_/}.${RUN_ID}-${RUN_ATTEMPT}"
+          job_name="gpytorch-qr.${GIT_SHA::7}-${event_name//_/}.${{ github.run_id }}-${{ github.run_attempt }}"
+          github_config_map_name="${job_name}-github-config"
           export JOB_NAME="$job_name"
+          export GITHUB_CONFIG_MAP_NAME="$github_config_map_name"
+
+          kubectl create configmap "$github_config_map_name" \
+            --from-literal=GITHUB_REPOSITORY="${{ github.repository }}" \
+            --from-literal=GITHUB_EVENT_NAME="${{ github.event_name }}" \
+            --from-literal=GITHUB_REF_NAME="${{ github.ref_name }}" \
+            --from-literal=GITHUB_RELEASE_ID="${{ github.event.release.id }}" \
+            --from-literal=GITHUB_RELEASE_TAG_NAME="${{ github.event.release.tag_name }}" \
+            --from-literal=GITHUB_CHECK_RUN_ID="${{ steps.checks.outputs.k8s-check-run-id }}" \
+            --from-literal=PUBLISH_DOC_CHECK_RUN_ID="${{ inputs.publish_doc_check_run_id }}" \
+            --namespace="$KUBE_NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
           template_vars="$(grep -oE '\$\{[A-Z_][A-Z0-9_]*\}' .github/k8s/job.yaml | sort -u | tr '\n' ' ')"
           envsubst "$template_vars" < .github/k8s/job.yaml | kubectl apply -f -
+
+          job_uid="$(kubectl get job "$job_name" --namespace="$KUBE_NAMESPACE" -o jsonpath='{.metadata.uid}')"
+          kubectl patch configmap "$github_config_map_name" \
+            --namespace="$KUBE_NAMESPACE" \
+            --type=merge \
+            --patch="{\"metadata\":{\"ownerReferences\":[{\"apiVersion\":\"batch/v1\",\"kind\":\"Job\",\"name\":\"${job_name}\",\"uid\":\"${job_uid}\"}]}}"
+
           kubectl wait \
             --namespace="$KUBE_NAMESPACE" \
             --for=create \

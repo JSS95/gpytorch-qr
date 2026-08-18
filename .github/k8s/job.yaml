@@ -57,7 +57,7 @@ spec:
               apt-get update
               apt-get install -y --no-install-recommends ca-certificates curl git openssl
               git init .
-              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
               git fetch --depth 1 origin "${GIT_SHA}"
               git checkout --detach FETCH_HEAD
 
@@ -71,23 +71,14 @@ spec:
                 bash -euo pipefail .github/k8s/monitor-heartbeat.sh
                 sleep 5
               done
+          envFrom:
+            - secretRef:
+                name: gpytorch-qr-github-app
+            - configMapRef:
+                name: ${GITHUB_CONFIG_MAP_NAME}
           env:
-            - name: GH_APP_ID
-              valueFrom:
-                secretKeyRef:
-                  name: github-app
-                  key: GH_APP_ID
-            - name: GH_APP_PRIVATE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: github-app
-                  key: GH_APP_PRIVATE_KEY
-            - name: GITHUB_REPOSITORY
-              value: "${GITHUB_REPOSITORY}"
             - name: GIT_SHA
               value: "${GIT_SHA}"
-            - name: GITHUB_CHECK_RUN_ID
-              value: "${GITHUB_CHECK_RUN_ID}"
       containers:
         - name: build
           image: python:3.13
@@ -135,13 +126,13 @@ spec:
               apt-get update
               apt-get install -y --no-install-recommends ca-certificates curl git gzip openssl tar
               git init .
-              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
               git fetch --depth 1 origin "${GIT_SHA}"
               git checkout --detach FETCH_HEAD
 
               pip install .[doc]
 
-              if [ "${GITHUB_EVENT_NAME}" != "release" ]; then
+              if [ "$GITHUB_EVENT_NAME" != "release" ]; then
                 export GPYTORCHQR_N_EPOCHS=1
               fi
               jupyter nbconvert --to notebook --execute --inplace examples/*.ipynb
@@ -161,34 +152,11 @@ spec:
                 touch /heartbeat/doc-dispatched
               fi
               bash -euo pipefail .github/k8s/build-heartbeat.sh finish success "$heartbeat_pid"
+          envFrom:
+            - secretRef:
+                name: gpytorch-qr-github-app
+            - configMapRef:
+                name: ${GITHUB_CONFIG_MAP_NAME}
           env:
-            - name: GH_APP_ID
-              valueFrom:
-                secretKeyRef:
-                  name: github-app
-                  key: GH_APP_ID
-            - name: GH_APP_PRIVATE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: github-app
-                  key: GH_APP_PRIVATE_KEY
-            - name: GH_APP_INSTALLATION_ID
-              valueFrom:
-                secretKeyRef:
-                  name: github-app
-                  key: GH_APP_INSTALLATION_ID
-                  optional: true
-            - name: GITHUB_REPOSITORY
-              value: "${GITHUB_REPOSITORY}"
             - name: GIT_SHA
               value: "${GIT_SHA}"
-            - name: GITHUB_EVENT_NAME
-              value: "${GITHUB_EVENT_NAME}"
-            - name: GITHUB_RELEASE_ID
-              value: "${GITHUB_RELEASE_ID}"
-            - name: GITHUB_RELEASE_TAG_NAME
-              value: "${GITHUB_RELEASE_TAG_NAME}"
-            - name: GITHUB_CHECK_RUN_ID
-              value: "${GITHUB_CHECK_RUN_ID}"
-            - name: PUBLISH_DOC_CHECK_RUN_ID
-              value: "${PUBLISH_DOC_CHECK_RUN_ID}"
