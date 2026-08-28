@@ -31,3 +31,9 @@ Utilities
 
 .. automodule:: gpytorch_qr.utils
     :members:
+
+Settings
+--------
+
+.. automodule:: gpytorch_qr.settings
+    :members:

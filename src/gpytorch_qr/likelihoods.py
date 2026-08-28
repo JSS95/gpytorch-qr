@@ -12,6 +12,7 @@ from linear_operator.operators import (
 from torch.distributions import Independent
 
 from .distributions import AsymmetricLaplace
+from .settings import quantile_gap_lower_bound
 from .utils import centergap_to_quantiles
 
 __all__ = [
@@ -629,6 +630,7 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
             torch.tensor([q.shape[-1] for q in quantile_levels], dtype=torch.long),
         )
         lower_counts = []
+        quantile_level_offsets = []
         for q, idx in zip(quantile_levels, central_quantile_idxs):
             idx = torch.as_tensor(idx, dtype=torch.long)
             if idx.dim() == 0:
@@ -639,7 +641,14 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
             central_quantile = q.gather(-1, idx_for_gather).squeeze(-1)  # (*B)
             lower_count = (q < central_quantile.unsqueeze(-1)).sum(dim=-1)  # (*B)
             lower_counts.append(lower_count.unsqueeze(-1))
+            if (q.diff(dim=-1) <= 0).any():
+                raise ValueError("quantile_levels must be strictly increasing.")
+            quantile_level_offsets.append(q - central_quantile.unsqueeze(-1))
         self.register_buffer("lower_counts", torch.cat(lower_counts, dim=-1))
+        self.register_buffer(
+            "quantile_level_offsets",
+            torch.cat(quantile_level_offsets, dim=-1),
+        )
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
@@ -677,10 +686,17 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
 
         # 2. Convert center-gap function_samples to quantiles
         quantiles = []
+        quantile_idx = 0
         for i, samples in enumerate(each_samples):
             lc = self.lower_counts[..., i]
             q = self._convert_to_quantiles(samples, lc)
+            num_quantiles = int(self.num_quantiles[i])
+            offsets = self.quantile_level_offsets[
+                ..., quantile_idx : quantile_idx + num_quantiles
+            ].unsqueeze(-2)
+            q = q + quantile_gap_lower_bound.value() * offsets
             quantiles.append(q)
+            quantile_idx += num_quantiles
         quantile_function_samples = torch.cat(quantiles, dim=-1)  # (*B, N, T)
         return super().forward(quantile_function_samples)
 

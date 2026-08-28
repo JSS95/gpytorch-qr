@@ -3,6 +3,8 @@
 import torch
 import torch.nn.functional as F
 
+from .settings import quantile_gap_lower_bound
+
 __all__ = [
     "centergap_to_quantiles",
     "CenterGapToQuantileTransform",
@@ -10,7 +12,12 @@ __all__ = [
 ]
 
 
-def centergap_to_quantiles(central, lower_gaps, upper_gaps):
+def centergap_to_quantiles(
+    central,
+    lower_gaps,
+    upper_gaps,
+    quantile_level_offsets=None,
+):
     """Convert center-gap representation samples to quantiles.
 
     Parameters
@@ -21,6 +28,11 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
         Pre-softplus-transformed lower gap values.
     upper_gaps : torch.Tensor with shape (..., U)
         Pre-softplus-transformed upper gap values.
+    quantile_level_offsets : torch.Tensor, optional
+        Quantile levels relative to the central quantile, with shape
+        broadcastable to ``(..., Q)``. The active
+        :class:`gpytorch_qr.settings.quantile_gap_lower_bound` multiplies these
+        offsets, adding ``lower_bound * diff(q)`` to each adjacent gap.
 
     Returns
     -------
@@ -38,6 +50,8 @@ def centergap_to_quantiles(central, lower_gaps, upper_gaps):
     upper_quantiles = central + upper_gaps.cumsum(dim=quantile_dim)
 
     ret = torch.concat([lower_quantiles, central, upper_quantiles], dim=quantile_dim)
+    if quantile_level_offsets is not None:
+        ret = ret + quantile_gap_lower_bound.value() * quantile_level_offsets
     return ret
 
 
@@ -81,7 +95,7 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
     codomain = torch.distributions.constraints.real_vector
     bijective = True
 
-    def __init__(self, Qs, Ls):
+    def __init__(self, Qs, Ls, quantile_level_offsets=None):
         super().__init__()
         if len(Qs) != len(Ls):
             raise ValueError("Qs and Ls must have the same length.")
@@ -105,6 +119,16 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
             gap_offsets.append(gap_offsets[-1] + q - 1)
         self._gap_offsets = gap_offsets
 
+        if (
+            quantile_level_offsets is not None
+            and quantile_level_offsets.shape[-1] != offsets[-1]
+        ):
+            raise ValueError(
+                f"Expected quantile_level_offsets size {offsets[-1]} at dim -1, "
+                f"got {quantile_level_offsets.shape[-1]}."
+            )
+        self.quantile_level_offsets = quantile_level_offsets
+
         self.quantile_dim = -1
 
     def _call(self, x):
@@ -121,7 +145,21 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
             gap_start = self._gap_offsets[i]
             lower = torch.narrow(x, qdim, gap_start, l)
             upper = torch.narrow(x, qdim, gap_start + l, q - 1 - l)
-            out.append(centergap_to_quantiles(c, lower, upper))
+            quantile_level_offsets = None
+            if self.quantile_level_offsets is not None:
+                quantile_level_offsets = torch.narrow(
+                    self.quantile_level_offsets, qdim, self._offsets[i], q
+                )
+                if quantile_level_offsets.ndim < c.ndim:
+                    quantile_level_offsets = quantile_level_offsets.unsqueeze(-2)
+            out.append(
+                centergap_to_quantiles(
+                    c,
+                    lower,
+                    upper,
+                    quantile_level_offsets=quantile_level_offsets,
+                )
+            )
         return torch.cat(out, dim=qdim)
 
     def _inverse(self, y):
@@ -136,6 +174,11 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
         gap_parts = []
         for start, q, l in zip(self._offsets[:-1], self.Qs, self.Ls):
             yi = torch.narrow(y, qdim, start, q)
+            if self.quantile_level_offsets is not None:
+                offsets = torch.narrow(self.quantile_level_offsets, qdim, start, q)
+                if offsets.ndim < yi.ndim:
+                    offsets = offsets.unsqueeze(-2)
+                yi = yi - quantile_gap_lower_bound.value() * offsets
             central = torch.narrow(yi, qdim, l, 1)
             lower_gaps_linear = torch.narrow(yi, qdim, 0, l + 1).diff(dim=qdim)
             upper_gaps_linear = torch.narrow(yi, qdim, l, q - l).diff(dim=qdim)
@@ -159,7 +202,12 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
         return F.logsigmoid(gaps).sum(dim=(-2, -1))
 
 
-def transform_centergap_posterior(posterior, Qs, Ls):
+def transform_centergap_posterior(
+    posterior,
+    Qs,
+    Ls,
+    quantile_level_offsets=None,
+):
     """Convert the center-gap posterior to quantile posterior.
 
     Parameters
@@ -173,6 +221,9 @@ def transform_centergap_posterior(posterior, Qs, Ls):
     Ls : list of int
         The number of lower quantiles in center-gap representation for each task,
         i.e., ``[L_1, L_2, ..., L_k]``.
+    quantile_level_offsets : torch.Tensor, optional
+        Quantile levels relative to their central quantiles, with trailing size
+        ``sum(Qs)``.
 
     Returns
     -------
@@ -186,5 +237,5 @@ def transform_centergap_posterior(posterior, Qs, Ls):
     Input and output distribution has specific structure in the quantile dimension.
     See :class:`CenterGapToQuantileTransform` for details.
     """
-    transform = CenterGapToQuantileTransform(Qs, Ls)
+    transform = CenterGapToQuantileTransform(Qs, Ls, quantile_level_offsets)
     return torch.distributions.TransformedDistribution(posterior, transform)

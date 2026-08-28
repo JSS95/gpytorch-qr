@@ -25,8 +25,19 @@ In center-gap representation, GP outputs model the central quantile :math:`Q_{\t
 
    Q_{\tau_0}(x) = f_0(x), \quad Q_{\tau_i}(x) = \begin{cases} Q_{\tau_0}(x) + \sum^i_{j=1} \Delta Q_j(x), \quad & i > 0 \\ Q_{\tau_0}(x) - \sum^i_{j=1} \Delta Q_{-j}(x), \quad & i < 0 \end{cases}
 
-where :math:`\Delta Q_j(x) = \log \left(1 + \exp f_j(x) \right)`.
+where :math:`\Delta Q_j(x) = \log \left(1 + \exp f_j(x) \right)` by default.
 This structure prevents quantile crossing.
+
+To keep gaps from collapsing numerically, the runtime setting
+:class:`gpytorch_qr.settings.quantile_gap_lower_bound` can enforce
+
+.. math::
+
+   \Delta Q_j(x) = \log \left(1 + \exp f_j(x) \right)
+   + \mathrm{lower\_bound}\,\Delta q_j,
+
+where :math:`\Delta q_j` is the difference between adjacent quantile levels.
+See :doc:`../settings` for usage details.
 
 .. rubric:: Correlation structure
 
