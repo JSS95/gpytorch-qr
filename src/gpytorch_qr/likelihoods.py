@@ -596,6 +596,10 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
     noise_constraint
     has_global_noise
     has_task_noise
+    lower_bound : float, default=0.0
+        Minimum gap per unit difference of quantile levels.
+        Adjacent quantile gaps are transformed as
+        ``softplus(raw_gap) + lower_bound * delta_q``.
     """
 
     def __init__(
@@ -609,6 +613,7 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
         noise_constraint=None,
         has_global_noise=True,
         has_task_noise=True,
+        lower_bound=0.0,
     ):
         quantile_levels_tensor = torch.cat(quantile_levels, dim=-1)
         kappa = (quantile_levels_tensor / (1 - quantile_levels_tensor)).sqrt()
@@ -628,7 +633,11 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
             "num_quantiles",
             torch.tensor([q.shape[-1] for q in quantile_levels], dtype=torch.long),
         )
+        self.lower_bound = float(lower_bound)
+        if self.lower_bound < 0:
+            raise ValueError("lower_bound must be non-negative.")
         lower_counts = []
+        quantile_offsets = []
         for q, idx in zip(quantile_levels, central_quantile_idxs):
             idx = torch.as_tensor(idx, dtype=torch.long)
             if idx.dim() == 0:
@@ -639,7 +648,16 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
             central_quantile = q.gather(-1, idx_for_gather).squeeze(-1)  # (*B)
             lower_count = (q < central_quantile.unsqueeze(-1)).sum(dim=-1)  # (*B)
             lower_counts.append(lower_count.unsqueeze(-1))
+            if self.lower_bound > 0 and (q.diff(dim=-1) <= 0).any():
+                raise ValueError(
+                    "quantile_levels must be strictly increasing when "
+                    "lower_bound is positive."
+                )
+            quantile_offsets.append(
+                self.lower_bound * (q - central_quantile.unsqueeze(-1))
+            )
         self.register_buffer("lower_counts", torch.cat(lower_counts, dim=-1))
+        self.register_buffer("quantile_offsets", torch.cat(quantile_offsets, dim=-1))
 
     def forward(self, function_samples):
         """Return the ALD distribution for the given function samples.
@@ -677,10 +695,17 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
 
         # 2. Convert center-gap function_samples to quantiles
         quantiles = []
+        quantile_idx = 0
         for i, samples in enumerate(each_samples):
             lc = self.lower_counts[..., i]
             q = self._convert_to_quantiles(samples, lc)
+            num_quantiles = int(self.num_quantiles[i])
+            offsets = self.quantile_offsets[
+                ..., quantile_idx : quantile_idx + num_quantiles
+            ].unsqueeze(-2)
+            q = q + offsets
             quantiles.append(q)
+            quantile_idx += num_quantiles
         quantile_function_samples = torch.cat(quantiles, dim=-1)  # (*B, N, T)
         return super().forward(quantile_function_samples)
 
@@ -736,6 +761,7 @@ class CenterGapQuantilesLikelihood(_CenterGapQuantilesLikelihoodBase):
     noise_constraint
     has_global_noise
     has_task_noise
+    lower_bound
     """
 
     def __init__(
@@ -749,6 +775,7 @@ class CenterGapQuantilesLikelihood(_CenterGapQuantilesLikelihoodBase):
         noise_constraint=None,
         has_global_noise=True,
         has_task_noise=True,
+        lower_bound=0.0,
     ):
         super().__init__(
             [quantile_levels],
@@ -760,6 +787,7 @@ class CenterGapQuantilesLikelihood(_CenterGapQuantilesLikelihoodBase):
             noise_constraint,
             has_global_noise,
             has_task_noise,
+            lower_bound,
         )
 
     def expected_log_prob(self, observations, function_dist, *args, **kwargs):

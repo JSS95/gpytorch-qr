@@ -216,6 +216,13 @@ class CenterGapQuantileGP(QuantileGP):
     num_lower_quantiles : list of int
         The number of lower quantiles in each output dimension
         for center-gap representation.
+    quantile_levels : list of torch.Tensor, optional
+        Quantile levels for each output dimension.
+        Required when ``lower_bound`` is positive.
+    lower_bound : float, default=0.0
+        Minimum gap per unit difference of quantile levels.
+        Adjacent quantile gaps are transformed as
+        ``softplus(raw_gap) + lower_bound * delta_q``.
 
     Notes
     -----
@@ -237,16 +244,53 @@ class CenterGapQuantileGP(QuantileGP):
         covar_module,
         num_quantiles,
         num_lower_quantiles,
+        quantile_levels=None,
+        lower_bound=0.0,
     ):
         super().__init__(variational_strategy, mean_module, covar_module)
         self.num_quantiles = num_quantiles
         self.num_lower_quantiles = num_lower_quantiles
+        self.lower_bound = float(lower_bound)
+        if self.lower_bound < 0:
+            raise ValueError("lower_bound must be non-negative.")
+        if quantile_levels is None:
+            if self.lower_bound > 0:
+                raise ValueError(
+                    "quantile_levels must be provided when lower_bound is positive."
+                )
+            quantile_offsets = None
+        else:
+            if len(quantile_levels) != len(num_quantiles):
+                raise ValueError(
+                    "quantile_levels and num_quantiles must have the same length."
+                )
+            quantile_offsets = []
+            for q, Q, L in zip(quantile_levels, num_quantiles, num_lower_quantiles):
+                q = torch.as_tensor(q)
+                if q.shape[-1] != Q:
+                    raise ValueError(
+                        f"Expected {Q} quantile levels, got {q.shape[-1]}."
+                    )
+                if self.lower_bound > 0 and (q.diff(dim=-1) <= 0).any():
+                    raise ValueError(
+                        "quantile_levels must be strictly increasing when "
+                        "lower_bound is positive."
+                    )
+                central_q = torch.narrow(q, -1, L, 1)
+                quantile_offsets.append(self.lower_bound * (q - central_q))
+            quantile_offsets = torch.cat(quantile_offsets, dim=-1)
+        self.register_buffer("quantile_offsets", quantile_offsets)
 
     def joint_quantile_posterior(self, x):
         dist = self(x)
         Qs = self.num_quantiles
         Ls = self.num_lower_quantiles
-        return transform_centergap_posterior(dist, Qs, Ls)
+        return transform_centergap_posterior(
+            dist,
+            Qs,
+            Ls,
+            quantile_offsets=self.quantile_offsets,
+        )
 
     def mean_quantiles_delta(self, x):
         latent_posterior = self(x)
@@ -255,14 +299,28 @@ class CenterGapQuantileGP(QuantileGP):
         k = len(self.num_quantiles)
         # gap_start: index where gap blocks begin (after k centrals)
         gap_start = k
+        quantile_start = 0
         quantiles = []
         for i, (Q, L) in enumerate(zip(self.num_quantiles, self.num_lower_quantiles)):
             num_upper = Q - L - 1
             center_mean = torch.narrow(latent_mean, qdim, i, 1)
             lower_gaps = torch.narrow(latent_mean, qdim, gap_start, L)
             upper_gaps = torch.narrow(latent_mean, qdim, gap_start + L, num_upper)
+            quantile_offsets = None
+            if self.quantile_offsets is not None:
+                quantile_offsets = torch.narrow(
+                    self.quantile_offsets, qdim, quantile_start, Q
+                )
+                if quantile_offsets.ndim < center_mean.ndim:
+                    quantile_offsets = quantile_offsets.unsqueeze(-2)
             quantiles.append(
-                centergap_to_quantiles(center_mean, lower_gaps, upper_gaps)
+                centergap_to_quantiles(
+                    center_mean,
+                    lower_gaps,
+                    upper_gaps,
+                    quantile_offsets=quantile_offsets,
+                )
             )
             gap_start += Q - 1
+            quantile_start += Q
         return torch.cat(quantiles, dim=qdim)

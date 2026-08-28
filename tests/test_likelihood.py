@@ -340,6 +340,36 @@ class TestCenterGapQuantilesLikelihood:
         diffs = output.base_dist.loc[..., 1:] - output.base_dist.loc[..., :-1]
         assert (diffs >= 0).all()
 
+    def test_forward_enforces_quantile_level_scaled_lower_bound(self):
+        lower_bound = 0.4
+        likelihood = CenterGapQuantilesLikelihood(
+            Q_LEVELS,
+            CENTRAL_IDX,
+            lower_bound=lower_bound,
+        )
+        raw_gaps = torch.linspace(-20.0, 2.0, Q - 1).expand(S, N, Q - 1)
+        function_samples = torch.cat(
+            [torch.zeros(S, N, 1), raw_gaps],
+            dim=-1,
+        )
+
+        quantiles = likelihood.forward(function_samples).base_dist.loc
+        gaps = quantiles.diff(dim=-1)
+
+        assert torch.allclose(
+            gaps,
+            torch.nn.functional.softplus(raw_gaps)
+            + lower_bound * Q_LEVELS.diff().expand_as(gaps),
+        )
+
+    def test_rejects_negative_lower_bound(self):
+        with pytest.raises(ValueError, match="non-negative"):
+            CenterGapQuantilesLikelihood(
+                Q_LEVELS,
+                CENTRAL_IDX,
+                lower_bound=-1.0,
+            )
+
     # --- expected_log_prob ---
 
     def test_expected_log_prob_no_batch_shape(self):
@@ -455,6 +485,27 @@ class TestMultioutputCenterGapQuantilesLikelihood:
             - output.base_dist.loc[..., Q1 : Q1 + Q2 - 1]
         )
         assert (diffs_2 >= 0).all()
+
+    def test_forward_enforces_per_output_lower_bounds(self):
+        lower_bound = 0.5
+        likelihood = MultioutputCenterGapQuantilesLikelihood(
+            [Q1_LEVELS, Q2_LEVELS],
+            [CENTRAL_IDX1, CENTRAL_IDX2],
+            lower_bound=lower_bound,
+        )
+        function_samples = torch.full((S, N, Q1 + Q2), -1000.0)
+        function_samples[..., :2] = 0.0
+
+        quantiles = likelihood.forward(function_samples).base_dist.loc
+
+        assert torch.allclose(
+            quantiles[..., :Q1].diff(dim=-1),
+            lower_bound * Q1_LEVELS.diff().expand(S, N, Q1_LEVELS.numel() - 1),
+        )
+        assert torch.allclose(
+            quantiles[..., Q1:].diff(dim=-1),
+            lower_bound * Q2_LEVELS.diff().expand(S, N, Q2_LEVELS.numel() - 1),
+        )
 
     # --- expected_log_prob ---
 

@@ -20,6 +20,7 @@ def test_mtgpqr_cg():
     x = x_range.repeat(2, 1)
     y = (mean(x) + torch.randn(x.shape).mul(std(x))).squeeze()
     q = torch.tensor([0.1, 0.25, 0.5, 0.75, 0.9])
+    lower_bound = 0.4
 
     class MyGP(CenterGapQuantileGP):
         def __init__(
@@ -58,13 +59,19 @@ def test_mtgpqr_cg():
                 covar,
                 [num_quantiles],
                 [num_lower_quantiles],
+                quantile_levels=[q],
+                lower_bound=lower_bound,
             )
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
     num_latents = 7
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents)
-    likelihood = CenterGapQuantilesLikelihood(q, central_q_index)
+    likelihood = CenterGapQuantilesLikelihood(
+        q,
+        central_q_index,
+        lower_bound=lower_bound,
+    )
 
     gp.train()
     likelihood.train()
@@ -84,9 +91,17 @@ def test_mtgpqr_cg():
     gp.eval()
     x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
     with torch.no_grad():
-        gp.joint_quantile_posterior(x_pred)
+        posterior_samples = gp.joint_quantile_posterior(x_pred).sample()
+        assert (
+            posterior_samples.diff(dim=-1)
+            >= lower_bound * q.diff() - torch.finfo(q.dtype).eps
+        ).all()
         gp.mean_quantiles_mc(x_pred, num_samples=1)
-        gp.mean_quantiles_delta(x_pred)
+        delta_quantiles = gp.mean_quantiles_delta(x_pred)
+        assert (
+            delta_quantiles.diff(dim=-1)
+            >= lower_bound * q.diff() - torch.finfo(q.dtype).eps
+        ).all()
         gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
         likelihood(gp(x_pred))
 
