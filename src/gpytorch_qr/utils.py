@@ -3,7 +3,11 @@
 import torch
 import torch.nn.functional as F
 
-from .settings import quantile_gap_lower_bound
+from .settings import (
+    enforce_strict_quantile_order,
+    quantile_gap_lower_bound,
+    quantile_reconstruction_dtype,
+)
 
 __all__ = [
     "centergap_to_quantiles",
@@ -39,8 +43,18 @@ def centergap_to_quantiles(
     quantiles : torch.Tensor with shape (..., Q)
         Quantile values. (Q = L + U + 1)
         The quantiles are ordered in increasing order along the quantile dimension.
+        Their dtype is controlled by
+        :class:`gpytorch_qr.settings.quantile_reconstruction_dtype`.
     """
     quantile_dim = -1
+    dtype = quantile_reconstruction_dtype.value()
+    if dtype is not None:
+        central = central.to(dtype=dtype)
+        lower_gaps = lower_gaps.to(dtype=dtype)
+        upper_gaps = upper_gaps.to(dtype=dtype)
+        if quantile_level_offsets is not None:
+            quantile_level_offsets = quantile_level_offsets.to(dtype=dtype)
+
     lower_gaps = F.softplus(lower_gaps)
     lower_quantiles = central - lower_gaps.flip(dims=[quantile_dim]).cumsum(
         dim=quantile_dim
@@ -53,6 +67,39 @@ def centergap_to_quantiles(
     if quantile_level_offsets is not None:
         ret = ret + quantile_gap_lower_bound.value() * quantile_level_offsets
     return ret
+
+
+def _enforce_strict_quantile_order(quantiles, Qs):
+    if not enforce_strict_quantile_order.value():
+        return quantiles
+
+    qdim = -1
+    output_blocks = []
+    start = 0
+    for Q in Qs:
+        block = torch.narrow(quantiles, qdim, start, Q)
+        if not torch.isfinite(block).all():
+            raise RuntimeError(
+                "Strict quantile ordering requires finite predicted quantiles."
+            )
+
+        ordered = [torch.narrow(block, qdim, 0, 1)]
+        for i in range(1, Q):
+            current = torch.narrow(block, qdim, i, 1)
+            previous = ordered[-1]
+            next_representable = torch.nextafter(
+                previous.detach(),
+                torch.full_like(previous, float("inf")),
+            )
+            if not torch.isfinite(next_representable).all():
+                raise RuntimeError(
+                    "Strict quantile ordering exceeded the finite range of the "
+                    "prediction dtype."
+                )
+            ordered.append(torch.maximum(current, next_representable))
+        output_blocks.append(torch.cat(ordered, dim=qdim))
+        start += Q
+    return torch.cat(output_blocks, dim=qdim)
 
 
 def _softplus_inverse(y):
@@ -160,9 +207,16 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
                     quantile_level_offsets=quantile_level_offsets,
                 )
             )
-        return torch.cat(out, dim=qdim)
+        return _enforce_strict_quantile_order(torch.cat(out, dim=qdim), self.Qs)
 
     def _inverse(self, y):
+        if enforce_strict_quantile_order.value():
+            raise NotImplementedError(
+                "The strict-order correction is not invertible. Disable "
+                "enforce_strict_quantile_order to evaluate inverse transforms "
+                "or posterior log probabilities."
+            )
+
         qdim = self.quantile_dim
         if y.shape[qdim] != self._offsets[-1]:
             raise ValueError(
@@ -170,12 +224,18 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
                 f"got {y.shape[qdim]}."
             )
 
+        dtype = quantile_reconstruction_dtype.value()
+        if dtype is not None:
+            y = y.to(dtype=dtype)
+
         centrals = []
         gap_parts = []
         for start, q, l in zip(self._offsets[:-1], self.Qs, self.Ls):
             yi = torch.narrow(y, qdim, start, q)
             if self.quantile_level_offsets is not None:
                 offsets = torch.narrow(self.quantile_level_offsets, qdim, start, q)
+                if dtype is not None:
+                    offsets = offsets.to(dtype=dtype)
                 if offsets.ndim < yi.ndim:
                     offsets = offsets.unsqueeze(-2)
                 yi = yi - quantile_gap_lower_bound.value() * offsets
@@ -188,6 +248,11 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
         return torch.cat(centrals + gap_parts, dim=qdim)
 
     def log_abs_det_jacobian(self, x, y):
+        if enforce_strict_quantile_order.value():
+            raise NotImplementedError(
+                "The strict-order correction has no invertible Jacobian."
+            )
+
         qdim = self.quantile_dim
         if x.shape[qdim] != self._offsets[-1]:
             raise ValueError(
@@ -199,6 +264,9 @@ class CenterGapToQuantileTransform(torch.distributions.transforms.Transform):
         for i, q in enumerate(self.Qs):
             gap_blocks.append(torch.narrow(x, qdim, self._gap_offsets[i], q - 1))
         gaps = torch.cat(gap_blocks, dim=qdim)
+        dtype = quantile_reconstruction_dtype.value()
+        if dtype is not None:
+            gaps = gaps.to(dtype=dtype)
         return F.logsigmoid(gaps).sum(dim=(-2, -1))
 
 

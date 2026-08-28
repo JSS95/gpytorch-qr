@@ -2,7 +2,13 @@
 
 import math
 
-__all__ = ["quantile_gap_lower_bound"]
+import torch
+
+__all__ = [
+    "enforce_strict_quantile_order",
+    "quantile_gap_lower_bound",
+    "quantile_reconstruction_dtype",
+]
 
 
 class _value_context:
@@ -69,3 +75,57 @@ class quantile_gap_lower_bound(_value_context):
                 "quantile_gap_lower_bound must be finite and non-negative."
             )
         super().__init__(value)
+
+
+class quantile_reconstruction_dtype(_value_context):
+    """Set the dtype used to reconstruct center-gap quantiles.
+
+    The center, raw gaps, and quantile-level offsets are converted before the
+    softplus, cumulative-sum, and addition operations. The reconstructed
+    quantiles retain the selected dtype. This prevents a small gap from being
+    rounded away when it is added to a large central quantile.
+
+    Parameters
+    ----------
+    dtype : torch.dtype or None
+        A real floating-point dtype. ``None`` preserves the dtype of the latent
+        center and gaps and is the default.
+    """
+
+    _global_value = None
+
+    def __init__(self, dtype):
+        if dtype is not None and (
+            not isinstance(dtype, torch.dtype) or not dtype.is_floating_point
+        ):
+            raise ValueError(
+                "quantile_reconstruction_dtype must be a real floating-point "
+                "torch.dtype or None."
+            )
+        super().__init__(dtype)
+
+
+class enforce_strict_quantile_order(_value_context):
+    """Enforce representably distinct center-gap quantile predictions.
+
+    When enabled, each predicted quantile is at least the next representable
+    floating-point value above the preceding quantile. The correction is
+    applied independently to each output dimension and only to model posterior
+    predictions, not to the training likelihood.
+
+    This is an inference-oriented, dtype-dependent correction. It guarantees
+    strict order for finite predictions but does not preserve a requested
+    mathematical gap when that gap is smaller than one ULP.
+
+    Parameters
+    ----------
+    state : bool, default=True
+        Whether to enable strict quantile ordering.
+    """
+
+    _global_value = False
+
+    def __init__(self, state=True):
+        if not isinstance(state, bool):
+            raise ValueError("enforce_strict_quantile_order must be a bool.")
+        super().__init__(state)

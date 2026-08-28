@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `gpytorch_qr.settings.quantile_reconstruction_dtype` controls the dtype used for center-gap quantile reconstruction.
+- `gpytorch_qr.settings.enforce_strict_quantile_order` optionally enforces representably distinct quantiles in model predictions.
+
 ## [0.10.0] - 2026-08-28
 
 ### Added

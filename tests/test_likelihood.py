@@ -247,6 +247,15 @@ class TestCenterGapQuantilesLikelihood:
         assert output.batch_shape == torch.Size([S, B, N])
         assert output.event_shape == torch.Size([Q])
 
+    def test_forward_with_batch_uses_reconstruction_dtype(self):
+        q = Q_LEVELS.unsqueeze(0).expand(B, Q).contiguous()
+        likelihood = CenterGapQuantilesLikelihood(q, CENTRAL_IDX)
+
+        with settings.quantile_reconstruction_dtype(torch.float64):
+            output = likelihood.forward(torch.randn(S, B, N, Q))
+
+        assert output.base_dist.loc.dtype is torch.float64
+
     def test_forward_reconstruction_no_batch(self):
         lc = CENTRAL_IDX
         likelihood = CenterGapQuantilesLikelihood(Q_LEVELS, CENTRAL_IDX)
@@ -360,6 +369,19 @@ class TestCenterGapQuantilesLikelihood:
             + lower_bound * Q_LEVELS.diff().expand_as(gaps),
         )
 
+    def test_strict_order_setting_does_not_modify_training_likelihood(self):
+        likelihood = CenterGapQuantilesLikelihood(Q_LEVELS, CENTRAL_IDX)
+        raw_gaps = torch.full((S, N, Q - 1), -1000.0)
+        function_samples = torch.cat(
+            [torch.zeros(S, N, 1), raw_gaps],
+            dim=-1,
+        )
+
+        with settings.enforce_strict_quantile_order():
+            quantiles = likelihood.forward(function_samples).base_dist.loc
+
+        assert (quantiles.diff(dim=-1) == 0).all()
+
     def test_rejects_negative_lower_bound(self):
         with pytest.raises(ValueError, match="non-negative"):
             settings.quantile_gap_lower_bound(-1.0)
@@ -375,6 +397,19 @@ class TestCenterGapQuantilesLikelihood:
             result = likelihood.expected_log_prob(obs, dist)
 
         assert result.shape == torch.Size([N])
+
+    def test_expected_log_prob_uses_reconstruction_dtype(self):
+        likelihood = CenterGapQuantilesLikelihood(Q_LEVELS, CENTRAL_IDX)
+        obs = torch.randn(N)
+        dist = _make_mtmvn(N, Q)
+
+        with (
+            gpytorch.settings.num_likelihood_samples(3),
+            settings.quantile_reconstruction_dtype(torch.float64),
+        ):
+            result = likelihood.expected_log_prob(obs, dist)
+
+        assert result.dtype is torch.float64
 
 
 # ===========================================================================

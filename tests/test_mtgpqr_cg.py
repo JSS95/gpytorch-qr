@@ -87,19 +87,32 @@ def test_mtgpqr_cg():
 
     gp.eval()
     x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
-    with torch.no_grad(), settings.quantile_gap_lower_bound(lower_bound):
+    with (
+        torch.no_grad(),
+        settings.quantile_gap_lower_bound(lower_bound),
+        settings.quantile_reconstruction_dtype(torch.float64),
+        settings.enforce_strict_quantile_order(),
+    ):
         posterior_samples = gp.joint_quantile_posterior(x_pred).sample()
+        assert posterior_samples.dtype is torch.float64
         assert (
             posterior_samples.diff(dim=-1)
             >= lower_bound * q.diff() - torch.finfo(q.dtype).eps
         ).all()
-        gp.mean_quantiles_mc(x_pred, num_samples=1)
+        mc_mean = gp.mean_quantiles_mc(x_pred, num_samples=1)
+        assert (mc_mean.diff(dim=-1) > 0).all()
         delta_quantiles = gp.mean_quantiles_delta(x_pred)
+        assert delta_quantiles.dtype is torch.float64
         assert (
             delta_quantiles.diff(dim=-1)
             >= lower_bound * q.diff() - torch.finfo(q.dtype).eps
         ).all()
-        gp.quantile_quantiles_mc(x_pred, torch.tensor([0.025, 0.975]), num_samples=1)
+        mc_quantiles = gp.quantile_quantiles_mc(
+            x_pred,
+            torch.tensor([0.025, 0.975]),
+            num_samples=1,
+        )
+        assert (mc_quantiles.diff(dim=-1) > 0).all()
         likelihood(gp(x_pred))
 
 

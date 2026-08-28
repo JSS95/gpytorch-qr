@@ -12,7 +12,7 @@ from linear_operator.operators import (
 from torch.distributions import Independent
 
 from .distributions import AsymmetricLaplace
-from .settings import quantile_gap_lower_bound
+from .settings import quantile_gap_lower_bound, quantile_reconstruction_dtype
 from .utils import centergap_to_quantiles
 
 __all__ = [
@@ -721,7 +721,12 @@ class _CenterGapQuantilesLikelihoodBase(MultitaskAsymmetricLaplaceLikelihood):
             # Flatten *B: (S, B_flat, N, Q)
             fs_flat = samples.reshape(S, B_flat, N, Q)
             lc_flat = lc.reshape(-1).expand(B_flat)  # broadcast lc to (B_flat,)
-            quantiles_flat = torch.empty_like(fs_flat)
+            dtype = quantile_reconstruction_dtype.value() or fs_flat.dtype
+            quantiles_flat = torch.empty(
+                fs_flat.shape,
+                dtype=dtype,
+                device=fs_flat.device,
+            )
             for unique_lc in lc_flat.unique():
                 lc_val = int(unique_lc)
                 mask = lc_flat == unique_lc

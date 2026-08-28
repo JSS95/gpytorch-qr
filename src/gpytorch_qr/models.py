@@ -6,7 +6,11 @@ import gpytorch
 import torch
 
 from .settings import quantile_gap_lower_bound
-from .utils import centergap_to_quantiles, transform_centergap_posterior
+from .utils import (
+    _enforce_strict_quantile_order,
+    centergap_to_quantiles,
+    transform_centergap_posterior,
+)
 
 __all__ = [
     "QuantileGP",
@@ -115,7 +119,10 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
         """
         dist = self.joint_quantile_posterior(x)
         samples = dist.rsample(torch.Size([num_samples]))
-        return samples.mean(dim=0)
+        return self._postprocess_quantiles(samples.mean(dim=0))
+
+    def _postprocess_quantiles(self, quantiles):
+        return quantiles
 
     def mean_quantiles_delta(self, x):
         """Posterior mean of quantiles by 0th-order delta method.
@@ -168,7 +175,8 @@ class QuantileGP(gpytorch.models.ApproximateGP, abc.ABC):
         """
         dist = self.joint_quantile_posterior(x)
         samples = dist.rsample(torch.Size([num_samples]))
-        return samples.quantile(q, dim=0)
+        quantiles = samples.quantile(q.to(samples), dim=0)
+        return self._postprocess_quantiles(quantiles)
 
 
 class DirectQuantileGP(QuantileGP):
@@ -276,6 +284,9 @@ class CenterGapQuantileGP(QuantileGP):
             )
         return self.quantile_level_offsets
 
+    def _postprocess_quantiles(self, quantiles):
+        return _enforce_strict_quantile_order(quantiles, self.num_quantiles)
+
     def joint_quantile_posterior(self, x):
         dist = self(x)
         Qs = self.num_quantiles
@@ -319,4 +330,4 @@ class CenterGapQuantileGP(QuantileGP):
             )
             gap_start += Q - 1
             quantile_start += Q
-        return torch.cat(quantiles, dim=qdim)
+        return self._postprocess_quantiles(torch.cat(quantiles, dim=qdim))
