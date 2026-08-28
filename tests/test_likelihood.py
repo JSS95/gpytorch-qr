@@ -4,6 +4,7 @@ import torch
 from gpytorch.likelihoods.noise_models import HomoskedasticNoise
 from torch.distributions import Independent
 
+from gpytorch_qr import settings
 from gpytorch_qr.distributions import AsymmetricLaplace
 from gpytorch_qr.likelihoods import (
     AsymmetricLaplaceLikelihood,
@@ -342,18 +343,15 @@ class TestCenterGapQuantilesLikelihood:
 
     def test_forward_enforces_quantile_level_scaled_lower_bound(self):
         lower_bound = 0.4
-        likelihood = CenterGapQuantilesLikelihood(
-            Q_LEVELS,
-            CENTRAL_IDX,
-            lower_bound=lower_bound,
-        )
+        likelihood = CenterGapQuantilesLikelihood(Q_LEVELS, CENTRAL_IDX)
         raw_gaps = torch.linspace(-20.0, 2.0, Q - 1).expand(S, N, Q - 1)
         function_samples = torch.cat(
             [torch.zeros(S, N, 1), raw_gaps],
             dim=-1,
         )
 
-        quantiles = likelihood.forward(function_samples).base_dist.loc
+        with settings.quantile_gap_lower_bound(lower_bound):
+            quantiles = likelihood.forward(function_samples).base_dist.loc
         gaps = quantiles.diff(dim=-1)
 
         assert torch.allclose(
@@ -364,11 +362,7 @@ class TestCenterGapQuantilesLikelihood:
 
     def test_rejects_negative_lower_bound(self):
         with pytest.raises(ValueError, match="non-negative"):
-            CenterGapQuantilesLikelihood(
-                Q_LEVELS,
-                CENTRAL_IDX,
-                lower_bound=-1.0,
-            )
+            settings.quantile_gap_lower_bound(-1.0)
 
     # --- expected_log_prob ---
 
@@ -491,12 +485,12 @@ class TestMultioutputCenterGapQuantilesLikelihood:
         likelihood = MultioutputCenterGapQuantilesLikelihood(
             [Q1_LEVELS, Q2_LEVELS],
             [CENTRAL_IDX1, CENTRAL_IDX2],
-            lower_bound=lower_bound,
         )
         function_samples = torch.full((S, N, Q1 + Q2), -1000.0)
         function_samples[..., :2] = 0.0
 
-        quantiles = likelihood.forward(function_samples).base_dist.loc
+        with settings.quantile_gap_lower_bound(lower_bound):
+            quantiles = likelihood.forward(function_samples).base_dist.loc
 
         assert torch.allclose(
             quantiles[..., :Q1].diff(dim=-1),

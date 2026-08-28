@@ -4,6 +4,7 @@ from gpytorch.means import ConstantMean
 from gpytorch.mlls import VariationalELBO
 from gpytorch.variational import CholeskyVariationalDistribution, VariationalStrategy
 
+from gpytorch_qr import settings
 from gpytorch_qr.likelihoods import CenterGapQuantilesLikelihood
 from gpytorch_qr.models import CenterGapQuantileGP
 from gpytorch_qr.variational import CenterGapLMCVariationalStrategy
@@ -60,18 +61,13 @@ def test_mtgpqr_cg():
                 [num_quantiles],
                 [num_lower_quantiles],
                 quantile_levels=[q],
-                lower_bound=lower_bound,
             )
 
     inducing_points = torch.linspace(0, 1, 10).reshape(-1, 1)
     central_q_index = 2
     num_latents = 7
     gp = MyGP(inducing_points, len(q), central_q_index, num_latents)
-    likelihood = CenterGapQuantilesLikelihood(
-        q,
-        central_q_index,
-        lower_bound=lower_bound,
-    )
+    likelihood = CenterGapQuantilesLikelihood(q, central_q_index)
 
     gp.train()
     likelihood.train()
@@ -81,16 +77,17 @@ def test_mtgpqr_cg():
         lr=0.01,
     )
 
-    for _ in range(1):
-        output = gp(x)
-        loss = -mll(output, y)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad()
+    with settings.quantile_gap_lower_bound(lower_bound):
+        for _ in range(1):
+            output = gp(x)
+            loss = -mll(output, y)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
     gp.eval()
     x_pred = torch.linspace(0, 2, 5).reshape(-1, 1)
-    with torch.no_grad():
+    with torch.no_grad(), settings.quantile_gap_lower_bound(lower_bound):
         posterior_samples = gp.joint_quantile_posterior(x_pred).sample()
         assert (
             posterior_samples.diff(dim=-1)
