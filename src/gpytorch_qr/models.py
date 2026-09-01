@@ -222,7 +222,7 @@ class CenterGapQuantileGP(QuantileGP):
     covar_module
     num_quantiles : list of int
         The number of quantiles in each output dimension.
-    num_lower_quantiles : list of int
+    central_quantile_idx : list of int
         The number of lower quantiles in each output dimension
         for center-gap representation.
     quantile_levels : list of torch.Tensor, optional
@@ -249,12 +249,12 @@ class CenterGapQuantileGP(QuantileGP):
         mean_module,
         covar_module,
         num_quantiles,
-        num_lower_quantiles,
+        central_quantile_idx,
         quantile_levels=None,
     ):
         super().__init__(variational_strategy, mean_module, covar_module)
         self.num_quantiles = num_quantiles
-        self.num_lower_quantiles = num_lower_quantiles
+        self.central_quantile_idx = central_quantile_idx
         if quantile_levels is None:
             quantile_level_offsets = None
         else:
@@ -263,7 +263,7 @@ class CenterGapQuantileGP(QuantileGP):
                     "quantile_levels and num_quantiles must have the same length."
                 )
             quantile_level_offsets = []
-            for q, Q, L in zip(quantile_levels, num_quantiles, num_lower_quantiles):
+            for q, Q, L in zip(quantile_levels, num_quantiles, central_quantile_idx):
                 q = torch.as_tensor(q)
                 if q.shape[-1] != Q:
                     raise ValueError(
@@ -290,7 +290,7 @@ class CenterGapQuantileGP(QuantileGP):
     def joint_quantile_posterior(self, x):
         dist = self(x)
         Qs = self.num_quantiles
-        Ls = self.num_lower_quantiles
+        Ls = self.central_quantile_idx
         return transform_centergap_posterior(
             dist,
             Qs,
@@ -308,7 +308,7 @@ class CenterGapQuantileGP(QuantileGP):
         quantile_start = 0
         all_quantile_level_offsets = self._quantile_level_offsets()
         quantiles = []
-        for i, (Q, L) in enumerate(zip(self.num_quantiles, self.num_lower_quantiles)):
+        for i, (Q, L) in enumerate(zip(self.num_quantiles, self.central_quantile_idx)):
             num_upper = Q - L - 1
             center_mean = torch.narrow(latent_mean, qdim, i, 1)
             lower_gaps = torch.narrow(latent_mean, qdim, gap_start, L)
