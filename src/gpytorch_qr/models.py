@@ -223,8 +223,7 @@ class CenterGapQuantileGP(QuantileGP):
     num_quantiles : list of int
         The number of quantiles in each output dimension.
     central_quantile_idx : list of int
-        The number of lower quantiles in each output dimension
-        for center-gap representation.
+        Indices of central quantiles in each output dimension.
     quantile_levels : list of torch.Tensor, optional
         Quantile levels for each output dimension. Required for posterior
         prediction when
